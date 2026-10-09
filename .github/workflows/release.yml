@@ -30,6 +30,8 @@ concurrency:
 jobs:
   prepare:
     name: Prepare release metadata
+    # Forks publish an explicitly selected draft without upstream release credentials.
+    if: ${{ github.repository == 'metasequoiaime/MSIME-Windows' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -154,13 +156,13 @@ jobs:
     needs: [prepare, dependencies]
     if: ${{ needs.prepare.outputs.should_publish == 'true' }}
     # SignPath's open-source plan accepts a signing request only when every job leading up to it ran on a GitHub-hosted runner, so under SignPath the three Windows jobs move off the release machine. The certificate path keeps the self-hosted runner, where the certificate lives.
-    runs-on: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && 'windows-2025' || fromJSON('["self-hosted","Windows","X64","msime-windows"]') }}
+    runs-on: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') && 'windows-2025' || fromJSON('["self-hosted","Windows","X64","msime-windows"]') }}
     env:
       # Each self-hosted runner has a different default vcpkg installation.
       # Keep every matrix job aligned with the registry selected below even
       # when GitHub schedules x64 and Win32 on different runner instances.
       # A GitHub-hosted runner has one, at C:\vcpkg on windows-2025 (VCPKG_INSTALLATION_ROOT); the verification step below checks the image still puts it there.
-      VCPKG_ROOT: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && 'C:\vcpkg' || matrix.vcpkg_root }}
+      VCPKG_ROOT: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') && 'C:\vcpkg' || matrix.vcpkg_root }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -215,7 +217,7 @@ jobs:
       - name: Verify the selected vcpkg root
         shell: pwsh
         env:
-          EXPECTED_VCPKG_ROOT: ${{ vars.WINDOWS_SIGNING_PROVIDER != 'signpath' && matrix.vcpkg_root || '' }}
+          EXPECTED_VCPKG_ROOT: ${{ (vars.WINDOWS_SIGNING_PROVIDER != 'signpath' && github.repository == 'metasequoiaime/MSIME-Windows') && matrix.vcpkg_root || '' }}
         run: |
           # On a hosted runner the image's own vcpkg is the expected one.
           $expected = if ($env:EXPECTED_VCPKG_ROOT) { $env:EXPECTED_VCPKG_ROOT } else { $env:VCPKG_INSTALLATION_ROOT }
@@ -225,7 +227,7 @@ jobs:
 
       # A hosted runner starts with no vcpkg binaries, so it restores the archives ci.yml's TSF job saves under the same scope. A run on main can read the caches develop's CI wrote, since develop is the default branch.
       - name: Restore dependency binaries
-        if: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' }}
+        if: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') }}
         id: vcpkg-cache
         uses: ./.github/actions/vcpkg-cache
         with:
@@ -238,7 +240,7 @@ jobs:
           & "$env:VCPKG_ROOT\\vcpkg.exe" install --triplet ${{ matrix.triplet }}
 
       - name: Save dependency binaries before compiling
-        if: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && steps.vcpkg-cache.outputs.matched-key != format('{0}-complete', steps.vcpkg-cache.outputs.key) }}
+        if: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') && steps.vcpkg-cache.outputs.matched-key != format('{0}-complete', steps.vcpkg-cache.outputs.key) }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.vcpkg-cache.outputs.path }}
@@ -278,14 +280,14 @@ jobs:
     name: Build Server
     needs: [prepare, dependencies]
     if: ${{ needs.prepare.outputs.should_publish == 'true' }}
-    runs-on: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && 'windows-2025' || fromJSON('["self-hosted","Windows","X64","msime-windows"]') }}
+    runs-on: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') && 'windows-2025' || fromJSON('["self-hosted","Windows","X64","msime-windows"]') }}
     env:
       # windows-2025 already sets this to its own vcpkg; the self-hosted runner's default is replaced with the instance reserved for this job.
-      VCPKG_INSTALLATION_ROOT: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && 'C:\vcpkg' || 'E:\\msime-runner\\vcpkg-3' }}
+      VCPKG_INSTALLATION_ROOT: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') && 'C:\vcpkg' || 'E:\\msime-runner\\vcpkg-3' }}
       # Only the GitHub-hosted path compiles through sccache (see Configure); the variable is inert where sccache is not the compiler launcher.
-      SCCACHE_GHA_ENABLED: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && 'true' || '' }}
+      SCCACHE_GHA_ENABLED: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') && 'true' || '' }}
     # A 4-core hosted runner is slower than the release machine; sccache hits from ci.yml's Server job on develop carry most of it.
-    timeout-minutes: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && 120 || 90 }}
+    timeout-minutes: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') && 120 || 90 }}
     steps:
       - name: Check out release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -317,7 +319,7 @@ jobs:
 
       # The job env replaces the image's own VCPKG_INSTALLATION_ROOT, so check C:\vcpkg against the vcpkg the image puts on PATH before install-boost.ps1, the cache key and the toolchain all read it.
       - name: Verify the hosted vcpkg root
-        if: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' }}
+        if: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') }}
         shell: pwsh
         run: |
           $onPath = Get-Command vcpkg.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -329,18 +331,18 @@ jobs:
 
       # The GitHub-hosted steps below are ci.yml's Server job: the same vcpkg cache scope, MSVC environment and sccache, so a release run on main restores what develop's CI saved instead of compiling Boost and the whole server cold on four cores.
       - name: Restore dependency binaries
-        if: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' }}
+        if: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') }}
         id: vcpkg-cache
         uses: ./.github/actions/vcpkg-cache
         with:
           scope: server-x64-windows-and-static-md
 
       - name: Set up MSVC environment
-        if: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' }}
+        if: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') }}
         uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
 
       - name: Set up sccache
-        if: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' }}
+        if: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') }}
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
 
       - name: Install Boost
@@ -348,7 +350,7 @@ jobs:
         run: ./scripts/ci/install-boost.ps1
 
       - name: Save Boost binaries before configuring
-        if: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && steps.vcpkg-cache.outputs.matched-key != format('{0}-complete', steps.vcpkg-cache.outputs.key) && steps.vcpkg-cache.outputs.matched-key != format('{0}-boost', steps.vcpkg-cache.outputs.key) }}
+        if: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') && steps.vcpkg-cache.outputs.matched-key != format('{0}-complete', steps.vcpkg-cache.outputs.key) && steps.vcpkg-cache.outputs.matched-key != format('{0}-boost', steps.vcpkg-cache.outputs.key) }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.vcpkg-cache.outputs.path }}
@@ -356,7 +358,7 @@ jobs:
 
       # The package job stages these outputs into the installer's expected directory.
       - name: Configure
-        if: ${{ vars.WINDOWS_SIGNING_PROVIDER != 'signpath' }}
+        if: ${{ (vars.WINDOWS_SIGNING_PROVIDER != 'signpath' && github.repository == 'metasequoiaime/MSIME-Windows') }}
         shell: pwsh
         run: >
           cmake -S server -B server/build-release -A x64
@@ -365,7 +367,7 @@ jobs:
 
       # Ninja Multi-Config because sccache plugs in through CMAKE_<LANG>_COMPILER_LAUNCHER, which the Visual Studio generator ignores; it keeps the --config Release / bin/Release layout the later steps read.
       - name: Configure with sccache
-        if: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' }}
+        if: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') }}
         shell: pwsh
         run: >
           cmake -S server -B server/build-release -G "Ninja Multi-Config"
@@ -375,7 +377,7 @@ jobs:
           -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
       - name: Save dependency binaries before compiling
-        if: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && steps.vcpkg-cache.outputs.matched-key != format('{0}-complete', steps.vcpkg-cache.outputs.key) }}
+        if: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') && steps.vcpkg-cache.outputs.matched-key != format('{0}-complete', steps.vcpkg-cache.outputs.key) }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.vcpkg-cache.outputs.path }}
@@ -386,7 +388,7 @@ jobs:
         run: cmake --build server/build-release --config Release --parallel
 
       - name: Report sccache hit rate
-        if: ${{ always() && vars.WINDOWS_SIGNING_PROVIDER == 'signpath' }}
+        if: ${{ always() && (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') }}
         shell: pwsh
         run: sccache --show-stats
 
@@ -451,6 +453,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm build
+          pnpm test
 
       - name: Upload the web assets
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -471,9 +474,9 @@ jobs:
     # that spends a signature, so the condition that stops it belongs here rather than being a
     # consequence of four other jobs' conditions that a later edit could quietly undo.
     if: ${{ needs.prepare.outputs.should_publish == 'true' }}
-    runs-on: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && 'windows-2025' || fromJSON('["self-hosted","Windows","X64","msime-windows"]') }}
+    runs-on: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') && 'windows-2025' || fromJSON('["self-hosted","Windows","X64","msime-windows"]') }}
     # A SignPath signing request waits for an approver, twice per release, so that path gets room for both approvals on top of the build.
-    timeout-minutes: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' && 150 || 60 }}
+    timeout-minutes: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') && 150 || 60 }}
     permissions:
       contents: write
       # Build provenance. Unlike Authenticode this costs nothing and needs no certificate, and the
@@ -527,7 +530,7 @@ jobs:
 
       # The hosted image's preinstalled ISCC compiles the installer only after the payload signing request has been approved. Prove now, before any signature is spent, that it resolves the Chinese language file and is new enough (6.6+) for msime_setup.iss.
       - name: Check the hosted Inno Setup can compile the installer
-        if: ${{ vars.WINDOWS_SIGNING_PROVIDER == 'signpath' }}
+        if: ${{ (vars.WINDOWS_SIGNING_PROVIDER == 'signpath' || github.repository != 'metasequoiaime/MSIME-Windows') }}
         shell: pwsh
         run: ./scripts/ci/check-inno-language.ps1
 
@@ -784,6 +787,7 @@ jobs:
       #
       # No event condition: the enclosing job already only runs when a release is being published, and gating this on workflow_dispatch limited the notification to the repair path -- the one branch of this workflow that almost never runs. Every release from the normal push path published in silence, MSIME-Web received no dispatch at all, and the site waited for a cron that GitHub delivers roughly seven times a day rather than the forty-eight the schedule asks for. 0.8.0 reached msime.app a day late that way.
       - name: Refresh the download manifest on msime.app
+        if: ${{ github.repository == 'metasequoiaime/MSIME-Windows' }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
