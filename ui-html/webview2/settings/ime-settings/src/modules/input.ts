@@ -9,11 +9,17 @@ import { hoistOverlay } from '../utils/overlay-host';
 type InputScheme = 'quanpin' | 'shuangpin' | 'wubi';
 type InputMode = 'chinese' | 'japanese';
 
-type TranslationProvider = 'tencent' | 'niutrans' | 'custom';
+type TranslationProvider = 'tencent' | 'niutrans' | 'custom' | 'glm';
+
+const GLM_TRANSLATION_DEFAULTS = {
+  endpoint: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+  model: 'glm-5.3-flashx'
+};
 
 let applyingInputConfig = false;
 let customTranslationEnabled = false;
 let niutransTranslationEnabled = false;
+let glmTranslationEnabled = false;
 
 const SHUANGPIN_REFRESH_TIMEOUT_MS = 5000;
 let shuangpinToastTimer: number | null = null;
@@ -174,6 +180,7 @@ function syncCandidateTranslationOptions(enabled: boolean): void {
 }
 
 function activeTranslationProvider(): TranslationProvider {
+  if (glmTranslationEnabled) return 'glm';
   if (niutransTranslationEnabled) return 'niutrans';
   if (customTranslationEnabled) return 'custom';
   return 'tencent';
@@ -185,6 +192,13 @@ function inputValue(id: string): string {
 
 function translationTestConfig(): Record<string, string> {
   const provider = activeTranslationProvider();
+  if (provider === 'glm') {
+    return {
+      endpoint: inputValue('glmTranslationEndpoint') || GLM_TRANSLATION_DEFAULTS.endpoint,
+      apiKey: inputValue('glmTranslationApiKey'),
+      model: inputValue('glmTranslationModel') || GLM_TRANSLATION_DEFAULTS.model
+    };
+  }
   if (provider === 'niutrans') {
     return { appId: inputValue('niutransAppId'), apiKey: inputValue('niutransApiKey') };
   }
@@ -198,6 +212,15 @@ function syncCandidateTranslationWarning(): void {
   const warning = document.getElementById('candidateTranslationApiWarning');
   if (!warning) return;
   const provider = activeTranslationProvider();
+  if (provider === 'glm') {
+    const config = translationTestConfig();
+    const validEndpoint = /^https:\/\/\S+$/i.test(config.endpoint);
+    warning.textContent = validEndpoint
+      ? '请填写智谱 API Key 后使用 GLM 翻译'
+      : '请填写以 https:// 开头的完整 GLM 接口地址';
+    warning.classList.toggle('is-hidden', validEndpoint && Boolean(config.apiKey));
+    return;
+  }
   if (provider === 'custom') {
     const endpoint = (document.getElementById('customTranslationEndpoint') as HTMLInputElement | null)?.value.trim();
     const valid = /^https?:\/\/\S+$/i.test(endpoint ?? '');
@@ -222,9 +245,11 @@ function syncTranslationProviderView(provider: TranslationProvider): void {
   const tencentFields = document.getElementById('tencentTranslationFields');
   const niutransFields = document.getElementById('niutransTranslationFields');
   const customFields = document.getElementById('customTranslationFields');
+  const glmFields = document.getElementById('glmTranslationFields');
   if (tencentFields) tencentFields.hidden = provider !== 'tencent';
   if (niutransFields) niutransFields.hidden = provider !== 'niutrans';
   if (customFields) customFields.hidden = provider !== 'custom';
+  if (glmFields) glmFields.hidden = provider !== 'glm';
   syncCandidateTranslationWarning();
 }
 
@@ -263,6 +288,34 @@ export function applyNiuTransConfig(config: Record<string, unknown> | undefined)
   if (appId && typeof config?.app_id === 'string') appId.value = config.app_id;
   if (apiKey && typeof config?.apikey === 'string') apiKey.value = config.apikey;
   refreshTranslationProvider();
+}
+
+export function applyGlmTranslationConfig(config: Record<string, unknown> | undefined): void {
+  glmTranslationEnabled = config?.enabled === true;
+  const endpoint = document.getElementById('glmTranslationEndpoint') as HTMLInputElement | null;
+  const apiKey = document.getElementById('glmTranslationApiKey') as HTMLInputElement | null;
+  const model = document.getElementById('glmTranslationModel') as HTMLInputElement | null;
+  if (endpoint) endpoint.value = typeof config?.endpoint === 'string' && config.endpoint.trim()
+    ? config.endpoint : GLM_TRANSLATION_DEFAULTS.endpoint;
+  if (model) model.value = typeof config?.model === 'string' && config.model.trim()
+    ? config.model : GLM_TRANSLATION_DEFAULTS.model;
+  if (apiKey) apiKey.value = typeof config?.api_key === 'string' ? config.api_key : '';
+  hideTranslationSecrets();
+  refreshTranslationProvider();
+}
+
+function hideTranslationSecrets(): void {
+  for (const [inputId, name] of [
+    ['tencentTmtSecretKey', 'SecretKey'], ['niutransApiKey', 'API Key'],
+    ['customTranslationApiKey', 'API Key'], ['glmTranslationApiKey', 'API Key']
+  ]) {
+    const input = document.getElementById(inputId) as HTMLInputElement | null;
+    const button = document.getElementById(`${inputId}Visibility`) as HTMLButtonElement | null;
+    if (input) input.type = 'password';
+    button?.setAttribute('aria-pressed', 'false');
+    button?.setAttribute('aria-label', `显示 ${name}`);
+    if (button) button.title = `显示 ${name}`;
+  }
 }
 
 function setupSecretVisibility(inputId: string, buttonId: string, name: string): void {
@@ -400,17 +453,18 @@ export function setupInput(): void {
   document.getElementById('translationProviderMenu')?.addEventListener('click', (event: Event) => {
     const item = (event.target as HTMLElement | null)?.closest<HTMLElement>('.dropdown-item');
     if (!item) return;
-    const provider: TranslationProvider = item.dataset.value === 'niutrans'
-      ? 'niutrans'
-      : item.dataset.value === 'custom'
-        ? 'custom'
-        : 'tencent';
+    const value = item.dataset.value;
+    if (value !== 'glm' && value !== 'niutrans' && value !== 'custom' && value !== 'tencent') return;
+    const provider: TranslationProvider = value;
+    glmTranslationEnabled = provider === 'glm';
     niutransTranslationEnabled = provider === 'niutrans';
     customTranslationEnabled = provider === 'custom';
+    hideTranslationSecrets();
     syncTranslationProviderView(provider);
     // Only one provider is active; keep the mutually-exclusive flags in sync.
     updateConfig('niutrans.enabled', niutransTranslationEnabled);
     updateConfig('custom_translation.enabled', customTranslationEnabled);
+    updateConfig('glm_translation.enabled', glmTranslationEnabled);
   });
   const translationFields: Record<string, string> = {
     tencentTmtSecretId: 'tencent_tmt.secret_id',
@@ -418,19 +472,25 @@ export function setupInput(): void {
     niutransAppId: 'niutrans.app_id',
     niutransApiKey: 'niutrans.apikey',
     customTranslationEndpoint: 'custom_translation.endpoint',
-    customTranslationApiKey: 'custom_translation.api_key'
+    customTranslationApiKey: 'custom_translation.api_key',
+    glmTranslationEndpoint: 'glm_translation.endpoint',
+    glmTranslationApiKey: 'glm_translation.api_key',
+    glmTranslationModel: 'glm_translation.model'
   };
   Object.entries(translationFields).forEach(([id, path]) => {
     const input = document.getElementById(id) as HTMLInputElement | null;
     input?.addEventListener('change', () => {
       input.value = input.value.trim();
       updateConfig(path, input.value);
+      if (!input.value && id === 'glmTranslationEndpoint') input.value = GLM_TRANSLATION_DEFAULTS.endpoint;
+      if (!input.value && id === 'glmTranslationModel') input.value = GLM_TRANSLATION_DEFAULTS.model;
       syncCandidateTranslationWarning();
     });
   });
   setupSecretVisibility('tencentTmtSecretKey', 'tencentTmtSecretKeyVisibility', 'SecretKey');
   setupSecretVisibility('niutransApiKey', 'niutransApiKeyVisibility', 'API Key');
   setupSecretVisibility('customTranslationApiKey', 'customTranslationApiKeyVisibility', 'API Key');
+  setupSecretVisibility('glmTranslationApiKey', 'glmTranslationApiKeyVisibility', 'API Key');
   setupCredentialTest(
     'candidateTranslationTestButton',
     'candidateTranslationTestStatus',

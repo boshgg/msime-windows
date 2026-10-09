@@ -5,6 +5,7 @@ export type CredentialTestService =
   | 'translation.tencent'
   | 'translation.niutrans'
   | 'translation.custom'
+  | 'translation.glm'
   | 'voice.asr'
   | 'voice.polish'
   | 'ai.assistant';

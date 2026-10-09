@@ -1,7 +1,8 @@
-// Validation and trust reporting for https://msime.app/update.json, kept apart from the settings DOM
-// so it can be tested. The manifest publishes four fields about the installer; the settings page used
-// to read only two of them, so the digest the release pipeline had already computed never reached the
-// person who was about to download an unsigned executable.
+// Validation and trust reporting are independent of the settings DOM. This fork checks its own
+// GitHub releases so an upstream update cannot silently remove GLM support or credential encryption.
+
+export const FORK_RELEASES_PAGE_URL = 'https://github.com/boshgg/msime-windows/releases';
+export const FORK_LATEST_RELEASE_API = 'https://api.github.com/repos/boshgg/msime-windows/releases/latest';
 
 export type Version = {
   display: string;
@@ -70,6 +71,39 @@ export function compareVersions(left: Version, right: Version): number {
 // the release workflow produces rather than accepted as any string.
 const INSTALLER_NAME = /^MetasequoiaIME_Setup_v[\w.-]+\.exe$/i;
 const SHA256 = /^[0-9a-f]{64}$/;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function validateGitHubRelease(value: unknown): ValidatedUpdate | null {
+  if (!isRecord(value) || value.draft !== false || value.prerelease !== false ||
+      typeof value.tag_name !== 'string' || !/^[\w.+-]+$/.test(value.tag_name)) return null;
+  const version = parseVersion(value.tag_name);
+  const releaseUrl = `${FORK_RELEASES_PAGE_URL}/tag/${value.tag_name}`;
+  if (!version || value.html_url !== releaseUrl) return null;
+
+  const installerBase = `MetasequoiaIME_Setup_v${value.tag_name.replace(/^v/i, '')}`;
+  const assets = Array.isArray(value.assets) ? value.assets : [];
+  // Bind both the digest and filename to an uploaded asset belonging to this exact release. Never
+  // display an arbitrary API string in the copyable PowerShell command or infer a code signature.
+  const installer = assets.find((asset): asset is Record<string, unknown> =>
+    isRecord(asset) && asset.state === 'uploaded' && typeof asset.name === 'string' &&
+    INSTALLER_NAME.test(asset.name) &&
+    (asset.name === `${installerBase}.exe` || asset.name === `${installerBase}-unsigned.exe`) &&
+    typeof asset.size === 'number' && Number.isSafeInteger(asset.size) && asset.size > 0 &&
+    asset.browser_download_url === `${FORK_RELEASES_PAGE_URL}/download/${value.tag_name}/${asset.name}`
+  );
+  const digest = typeof installer?.digest === 'string' && /^sha256:[0-9a-f]{64}$/i.test(installer.digest)
+    ? installer.digest.slice(7).toLowerCase() : null;
+  return {
+    version,
+    releaseUrl,
+    installerName: installer ? installer.name as string : null,
+    installerSha256: digest,
+    signed: typeof installer?.name === 'string' && installer.name.endsWith('-unsigned.exe') ? false : null
+  };
+}
 
 export function validateManifest(manifest: UpdateManifest, releasesPageUrl: string): ValidatedUpdate | null {
   if (typeof manifest.version !== 'string' || typeof manifest.releaseUrl !== 'string') {

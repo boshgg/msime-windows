@@ -2,6 +2,7 @@
 #include "window/caret_state_indicator_policy.h"
 #include "ime_config.h"
 #include "config/ime_config_internal.h"
+#include "config/credential_store.h"
 #include <Windows.h>
 #include <algorithm>
 #include <atomic>
@@ -213,6 +214,8 @@ AiAssistantConfig g_ai_assistant;
 TencentTmtConfig g_tencent_tmt;
 CustomTranslationConfig g_custom_translation;
 NiuTransConfig g_niutrans;
+GlmTranslationConfig g_glm_translation;
+std::mutex g_glm_translation_mutex;
 std::mutex g_network_proxy_mutex;
 NetworkProxyConfig g_network_proxy;
 FrequencyAdjustmentConfig g_frequency_adjustment;
@@ -286,7 +289,7 @@ namespace
 {
 const std::vector<std::string_view> &AiAssistantProviders()
 {
-    static const std::vector<std::string_view> providers{"deepseek", "openai", "siliconflow", "groq", "custom"};
+    static const std::vector<std::string_view> providers{"deepseek", "glm", "openai", "siliconflow", "groq", "custom"};
     return providers;
 }
 
@@ -359,7 +362,19 @@ bool LoadImeConfig()
         std::ifstream input(g_config_path, std::ios::binary);
         if (!input)
             return false;
-        const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+        std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+        input.close();
+        // Validate every credential before updating any runtime state. Migrate a
+        // legacy plaintext file in place before credentials can be used; the
+        // serialization boundary encrypts before creating the temporary file.
+        std::string protected_text = text;
+        if (!ConfigCredentials::ProtectToml(protected_text))
+            return false;
+        const bool needs_migration = protected_text != text;
+        if (!ConfigCredentials::UnprotectToml(text))
+            return false;
+        if (needs_migration && !WriteFileTextAtomically(g_config_path, protected_text))
+            return false;
         auto tbl = toml::parse(text);
 
         const int page_size = tbl["appearance"]["page_size"].value_or(6);
@@ -815,9 +830,8 @@ bool LoadImeConfig()
                 stored = VoiceInput::UsableToken(g_ai_assistant.token);
             g_ai_assistant.token = stored;
         }
-        g_ai_assistant.endpoint =
-            tbl["ai_assistant"]["endpoint"].value_or(std::string("https://api.deepseek.com/chat/completions"));
-        g_ai_assistant.model = tbl["ai_assistant"]["model"].value_or(std::string("deepseek-v4-flash"));
+        g_ai_assistant.endpoint = tbl["ai_assistant"]["endpoint"].value_or(std::string());
+        g_ai_assistant.model = tbl["ai_assistant"]["model"].value_or(std::string());
         const AiAssistantConfig ai_defaults;
         g_ai_assistant.endpoints = ai_defaults.endpoints;
         g_ai_assistant.models = ai_defaults.models;
@@ -870,6 +884,20 @@ bool LoadImeConfig()
         g_niutrans.enabled = tbl["niutrans"]["enabled"].value_or(false);
         g_niutrans.app_id = tbl["niutrans"]["app_id"].value_or(std::string());
         g_niutrans.apikey = tbl["niutrans"]["apikey"].value_or(std::string());
+        {
+            const GlmTranslationConfig defaults;
+            GlmTranslationConfig glm;
+            glm.enabled = tbl["glm_translation"]["enabled"].value_or(false);
+            glm.endpoint = tbl["glm_translation"]["endpoint"].value_or(defaults.endpoint);
+            glm.api_key = tbl["glm_translation"]["api_key"].value_or(std::string());
+            glm.model = tbl["glm_translation"]["model"].value_or(defaults.model);
+            if (glm.endpoint.empty())
+                glm.endpoint = defaults.endpoint;
+            if (glm.model.empty())
+                glm.model = defaults.model;
+            std::lock_guard<std::mutex> lock(g_glm_translation_mutex);
+            g_glm_translation = std::move(glm);
+        }
         {
             NetworkProxyConfig proxy;
             proxy.mode = tbl["network"]["proxy_mode"].value_or(std::string("system"));

@@ -157,6 +157,10 @@ set(SRC_FILES
     "./src/cloud/cloud_ime.h"
     "./src/cloud/cloud_translation.cpp"
     "./src/cloud/cloud_translation.h"
+    "./src/ai/chat_completion_request.cpp"
+    "./src/ai/chat_completion_request.h"
+    "./src/cloud/glm_translation.cpp"
+    "./src/cloud/glm_translation.h"
     "./src/cloud/custom_translation.cpp"
     "./src/cloud/custom_translation.h"
     "./src/cloud/niutrans_translation.cpp"
@@ -165,6 +169,8 @@ set(SRC_FILES
     "./src/cloud/tencent_tmt.h"
     "./src/cloud/translation_gloss.cpp"
     "./src/cloud/translation_gloss.h"
+    "./src/config/credential_store.cpp"
+    "./src/config/credential_store.h"
     "./src/config/ime_config.cpp"
     "./src/config/ime_config.h"
     "./src/config/ime_config_appearance.cpp"
@@ -319,7 +325,7 @@ add_dependencies(${PROJECT_NAME} Dictionaries)
 target_link_libraries(${PROJECT_NAME} PRIVATE winhttp)
 target_link_libraries(${PROJECT_NAME} PRIVATE CURL::libcurl)
 target_link_libraries(${PROJECT_NAME} PRIVATE ZLIB::ZLIB)
-target_link_libraries(${PROJECT_NAME} PRIVATE d2d1 dwrite dwmapi shell32 shcore ole32 bcrypt)
+target_link_libraries(${PROJECT_NAME} PRIVATE d2d1 dwrite dwmapi shell32 shcore ole32 bcrypt crypt32)
 
 # The helper executables below already build at /W4. The server itself -- the process that owns
 # every network call, the WebView2 hosts and the skin loader -- was still at the default /W3.
@@ -457,6 +463,8 @@ add_executable(${SETTINGS_EXECUTABLE_NAME} WIN32
     "./src/statistics/stats_overview.h"
     "./src/statistics/stats_store.cpp"
     "./src/statistics/stats_store.h"
+    "./src/config/credential_store.cpp"
+    "./src/config/credential_store.h"
     "./src/config/ime_config.cpp"
     "./src/config/ime_config.h"
     "./src/config/ime_config_appearance.cpp"
@@ -472,6 +480,10 @@ add_executable(${SETTINGS_EXECUTABLE_NAME} WIN32
     "./src/config/ime_config_toml.cpp"
     "./src/config/ime_config_toolbar.cpp"
     "./src/config/ime_config_write.cpp"
+    "./src/ai/chat_completion_request.cpp"
+    "./src/ai/chat_completion_request.h"
+    "./src/cloud/glm_translation.cpp"
+    "./src/cloud/glm_translation.h"
     "./src/cloud/custom_translation.cpp"
     "./src/cloud/custom_translation.h"
     "./src/cloud/niutrans_translation.cpp"
@@ -509,6 +521,7 @@ target_link_libraries(${SETTINGS_EXECUTABLE_NAME} PRIVATE
     CURL::libcurl
     ZLIB::ZLIB
     bcrypt
+    crypt32
     winhttp
     dwmapi
     dcomp

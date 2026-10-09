@@ -1,8 +1,11 @@
 # Metasequoia IME Installer
 
-本目录的脚本从 Windows 合仓目录收集产物、签名、用 Inno Setup 打成安装包。它服务两条流程：
+**本 fork（boshgg/msime-windows）的 v0.8.0 为未签名版本。** 产物由 GitHub 托管 CI 构建，未使用正式 Authenticode 证书。包内 Server 使用 `asInvoker`、`uiAccess=false`，可作为普通用户启动，但没有 UIAccess 权限，候选窗无法覆盖管理员权限窗口；Windows 可能显示信誉或未知发布者提示。下文的上游签名政策及持有证书时的打包方法不代表本 fork 的产物已签名。
 
-- **正式发布**：由 `MSIME-Windows` 的 release workflow 驱动，用真实证书签名包内全部 EXE/DLL 和最终安装包；产物是挂在 Release 上的 `MetasequoiaIME_Setup_v<版本>.exe`，并携带与 Release 二进制匹配的 PDB 符号文件。见下面「CI 契约」
+本目录的脚本从 Windows 合仓目录收集产物，用 Inno Setup 打成安装包；根据发布方式选择是否签名：
+
+- **本 fork v0.8.0 发布**：GitHub 托管 CI 生成未签名安装包，见 [fork Releases](https://github.com/boshgg/msime-windows/releases)
+- **上游签名发布**：由上游 `metasequoiaime/MSIME-Windows` 的 release workflow 驱动，用真实证书签名包内全部 EXE/DLL 和最终安装包；产物是挂在上游 Release 上的 `MetasequoiaIME_Setup_v<版本>.exe`，并携带与 Release 二进制匹配的 PDB 符号文件。见下面「CI 契约」
 - **本地测试**：手工跑，用本机自签名证书，用来在自己机器上验证安装流程。本文其余部分讲的是这条
 
 版本号不是固定的，由 `Prepare-PackageFiles.ps1` 的 `-TargetVersion` 决定，默认 `0.0.1`；正式发布时 CI 传入真实版本。
@@ -27,14 +30,14 @@ pwsh -File ./Prepare-PackageFiles.ps1 -TargetVersion 1.2.3 -RepoRoot .. `
 
 - **改动 `Prepare-PackageFiles.ps1` 里那些 `Assert-PathExists` 的源路径，会直接弄坏发布流水线。** 它断言的源路径由 workflow 逐一准备，改了要同步改 `.github/workflows/release.yml`。目录名本身可以由调用方指定，但每个目录内部的相对路径（如 `build-release\bin\Release`）仍是硬契约
 - **`THIRD_PARTY_NOTICES.txt` 从 `-NoticesDirectory` 指向的目录取，随安装包装到程序目录。** 合仓后这份声明覆盖整个产品、放在仓根，所以它和 `-TsfDirectory` 分成了两个参数。词库主体含 rime-ice（GPL-3.0）内容，其许可要求保留署名，所以这份文件缺失会让打包直接失败，而不是静默跳过
-- **`Sign-PackageBinaries-Local.ps1` 和 `Sign-Installer-Local.ps1` 只用于本地验证，CI 不会调用它们。** 它们创建本机自签名证书并尝试写入受信任存储，正式发布走 workflow 里用仓库 secret 中真实证书的签名步骤
+- **`Sign-PackageBinaries-Local.ps1` 和 `Sign-Installer-Local.ps1` 只用于本地验证，CI 不会调用它们。** 它们创建本机自签名证书并尝试写入受信任存储；上游签名发布使用正式证书，本 fork v0.8.0 不执行签名
 - 词库不再从相邻的 `MetasequoiaImeDict` 工作目录取，CI 从产品锁指定的 `dict-*` release 下载并校验 SHA256，再放到脚本期望的位置
 - 语言模型 `sc.lm` 不在那个 release 里。它由 `scripts/build-language-model.ps1` 在打包前从 `language-model/lock.json` 钉住的 libime 语料转换出来，下载摘要和产物摘要都要对上。release workflow 里对应的是「Build the word-lattice language model」这一步，缺了它 `Prepare-PackageFiles.ps1` 会直接失败
 - `windows-2025` runner 自带 Inno Setup 6.7.1，`Compile-Installer.ps1` 能自己找到 `ISCC.exe`。但它不带 `ChineseSimplified.isl`，`msime_setup.iss` 的 `[Languages]` 段依赖那个文件，所以 workflow 会在编译前按固定 revision 和校验和把它装进去
 
 ## 数据目录
 
-程序本体固定装在 `Program Files\metasequoiaime`（Server 带 `uiAccess=true`，只有装在受信任目录里这个标志才生效），**用户数据目录可以在安装向导里改**：词库、`config.toml`、用户词库、皮肤和前端资源都在那里，整包几百 MB，装 C 盘吃紧的用户可以放到别的盘。
+程序本体固定装在 `Program Files\metasequoiaime`（启用 `uiAccess=true` 的上游签名构建依赖受信任目录；本 fork v0.8.0 使用 `uiAccess=false`），**用户数据目录可以在安装向导里改**：词库、`config.toml`、用户词库、皮肤和前端资源都在那里，整包几百 MB，装 C 盘吃紧的用户可以放到别的盘。
 
 - 默认值 `%LOCALAPPDATA%\metasequoiaime`；升级安装时默认沿用上次的位置
 - 选择写进 `HKLM\Software\Metasequoia\MetasequoiaIME` 的 `DataDir`。这是运行期唯一的权威来源：Server（`server/src/utils/ime_paths.cpp`）、TSF DLL（`windows/src/Utils/FanyUtils.cpp`）和引擎（`engine/core/data_path.h`）各自按 `METASEQUOIA_IME_DATA_DIR` 环境变量 → 该注册表值 → `%LOCALAPPDATA%\metasequoiaime` 的顺序解析，三处必须保持一致。32 位 TSF DLL 用 `KEY_WOW64_64KEY` 读，所以这个值必须写在 64 位视图里
@@ -91,6 +94,8 @@ pwsh -File .\test.ps1
 也可以按上面的顺序逐步运行。
 
 ## SimplySign 真签名打包
+
+以下保留上游及持有正式证书者使用的打包方法，本 fork v0.8.0 未使用此流程。
 
 需要在本机用 Certum SimplySign 中的真实 Code Signing 证书制作可分发安装包时，先启动
 SimplySign Desktop、用手机 OTP 连接虚拟卡，然后执行：

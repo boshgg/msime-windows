@@ -12,10 +12,15 @@ vi.mock('./model-fetch', () => ({ setupModelFetch: vi.fn(() => vi.fn()) }));
 
 import { applyAiConfig, setupAiSettings } from './ai-settings';
 import { updateConfig } from './config-sync';
+import { setupCredentialTest } from './credential-test';
 
 class StubElement {
   value = '';
   placeholder = '';
+  type = 'password';
+  title = '';
+  attributes = new Map<string, string>();
+  setAttribute(name: string, value: string): void { this.attributes.set(name, value); }
   listeners = new Map<string, (event: unknown) => void>();
   addEventListener(type: string, listener: (event: unknown) => void): void {
     this.listeners.set(type, listener);
@@ -29,7 +34,7 @@ let elements: Map<string, StubElement>;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  elements = new Map(['aiToken', 'aiEndpoint', 'aiModel', 'aiProviderMenu'].map(id => [id, new StubElement()]));
+  elements = new Map(['aiToken', 'aiTokenVisibility', 'aiEndpoint', 'aiModel', 'aiProviderMenu'].map(id => [id, new StubElement()]));
   vi.stubGlobal('document', { getElementById: (id: string) => elements.get(id) ?? null });
   setupAiSettings();
 });
@@ -127,4 +132,33 @@ it('keeps the Custom base url, api key and model independent from built-in provi
   expect(elements.get('aiEndpoint')!.value).toBe('https://my-llm.example.test/v1/chat/completions');
   expect(elements.get('aiToken')!.value).toBe('custom-key');
   expect(elements.get('aiModel')!.value).toBe('my-model');
+});
+
+it('loads GLM defaults and sends its credentials to the connection test', () => {
+  applyAiConfig({ provider: 'glm', token_glm: 'glm-test-key', endpoint: '', model: '' });
+  expect(elements.get('aiEndpoint')!.value).toBe('https://open.bigmodel.cn/api/paas/v4/chat/completions');
+  expect(elements.get('aiModel')!.value).toBe('glm-5.3');
+  expect(elements.get('aiToken')!.type).toBe('password');
+  const [, , service, readConfig] = vi.mocked(setupCredentialTest).mock.calls[0];
+  expect(service()).toBe('ai.assistant');
+  expect(readConfig()).toEqual({
+    provider: 'glm', token: 'glm-test-key',
+    endpoint: 'https://open.bigmodel.cn/api/paas/v4/chat/completions', model: 'glm-5.3'
+  });
+});
+
+it('restores edited GLM values on return and hides a previously revealed token', () => {
+  applyAiConfig({ provider: 'glm', token_glm: 'saved-glm-key' });
+  elements.get('aiEndpoint')!.value = 'https://glm.example.test/v1/chat/completions';
+  elements.get('aiModel')!.value = 'glm-5.3-flashx';
+  elements.get('aiTokenVisibility')!.listeners.get('click')?.({});
+  expect(elements.get('aiToken')!.type).toBe('text');
+  elements.get('aiProviderMenu')!.select('openai');
+  expect(elements.get('aiToken')!.type).toBe('password');
+  expect(elements.get('aiTokenVisibility')!.attributes.get('aria-pressed')).toBe('false');
+  elements.get('aiProviderMenu')!.select('glm');
+  expect(elements.get('aiToken')!.value).toBe('saved-glm-key');
+  expect(elements.get('aiEndpoint')!.value).toBe('https://glm.example.test/v1/chat/completions');
+  expect(elements.get('aiModel')!.value).toBe('glm-5.3-flashx');
+  expect(updateConfig).toHaveBeenCalledWith('ai_assistant.token_glm', 'saved-glm-key');
 });

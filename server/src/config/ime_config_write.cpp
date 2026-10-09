@@ -1,5 +1,6 @@
 // 把设置写回 config.toml（批量、保留格式、先校验再原子替换），并通知 Server 重新加载配置或切换输入方案。
 #include "config/ime_config_internal.h"
+#include "config/credential_store.h"
 #include <Windows.h>
 #include <cwchar>
 #include <filesystem>
@@ -25,7 +26,9 @@ bool WriteConfiguredValues(const std::vector<ConfigValueUpdate> &updates)
     std::string text = ReadFileText(g_config_path);
     if (!TomlTextIsParseable(text))
     {
-        if (config_exists && config_size > 0 && text.empty())
+        // Do not overwrite a corrupt existing file (or an unreadable one) with
+        // defaults. Startup recovery retains it and attempts a safe migration.
+        if (config_exists && config_size > 0)
         {
             return false;
         }
@@ -35,6 +38,11 @@ bool WriteConfiguredValues(const std::vector<ConfigValueUpdate> &updates)
             return false;
         }
     }
+
+    // Check existing encrypted values before applying edits. Otherwise replacing
+    // one field could conceal an unreadable credential and permanently lose it.
+    if (!ConfigCredentials::ProtectToml(text))
+        return false;
 
     for (const auto &update : updates)
     {

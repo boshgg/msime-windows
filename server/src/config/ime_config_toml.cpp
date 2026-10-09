@@ -1,5 +1,6 @@
 // config.toml 的文本级原语：保留格式的键值替换与插入、跨行值定位、赋值遍历，以及读文件、原子写文件与解析校验。
 #include "config/ime_config_internal.h"
+#include "config/credential_store.h"
 #include <Windows.h>
 #include <filesystem>
 #include <fstream>
@@ -271,11 +272,14 @@ bool WriteFileBytes(const std::filesystem::path &path, const std::string &text)
 
 bool WriteFileTextAtomically(const std::filesystem::path &path, const std::string &text)
 {
+    std::string protected_text = text;
+    if (!ConfigCredentials::ProtectToml(protected_text))
+        return false;
     std::filesystem::path temp_path = path;
     temp_path += L".tmp";
     ClearReadOnlyAttribute(path);
     ClearReadOnlyAttribute(temp_path);
-    if (!WriteFileBytes(temp_path, text))
+    if (!WriteFileBytes(temp_path, protected_text))
     {
         return false;
     }
@@ -283,10 +287,10 @@ bool WriteFileTextAtomically(const std::filesystem::path &path, const std::strin
     {
         return true;
     }
-    const bool replaced = WriteFileBytes(path, text);
     std::error_code error;
     std::filesystem::remove(temp_path, error);
-    return replaced;
+    // A failed atomic replacement must leave the existing file intact.
+    return false;
 }
 
 bool TomlTextIsParseable(const std::string &text)

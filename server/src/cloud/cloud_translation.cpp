@@ -2,6 +2,7 @@
 
 #include "config/ime_config.h"
 #include "custom_translation.h"
+#include "glm_translation.h"
 #include "niutrans_translation.h"
 #include "tencent_tmt.h"
 #include "translation_gloss.h"
@@ -47,12 +48,15 @@ enum class Provider
     Tencent,
     Custom,
     NiuTrans,
+    Glm,
 };
 
-// Only one online provider is active at a time. NiuTrans and the custom DeepLX
-// endpoint override the Tencent default when enabled; NiuTrans wins if both are.
+// Only one online provider is active at a time. Explicit GLM, NiuTrans and
+// custom settings override the Tencent default, in that order.
 Provider ActiveProvider()
 {
+    if (GetConfiguredGlmTranslation().enabled)
+        return Provider::Glm;
     if (GetConfiguredNiuTrans().enabled)
         return Provider::NiuTrans;
     if (GetConfiguredCustomTranslation().enabled)
@@ -64,6 +68,10 @@ std::string ProviderScope()
 {
     switch (ActiveProvider())
     {
+    case Provider::Glm: {
+        const auto config = GetConfiguredGlmTranslation();
+        return "glm:" + config.endpoint + ":" + config.model;
+    }
     case Provider::NiuTrans:
         return "niutrans:" + GetConfiguredNiuTrans().app_id;
     case Provider::Custom:
@@ -147,6 +155,15 @@ NiuTransTranslation::Config ResolveNiuTransConfig()
     return {CloudTranslation::TrimSecret(configured.app_id), CloudTranslation::TrimSecret(configured.apikey)};
 }
 
+GlmTranslation::Config ResolveGlmConfig()
+{
+    const auto &configured = GetConfiguredGlmTranslation();
+    if (!configured.enabled)
+        return {};
+    return {CloudTranslation::TrimSecret(configured.endpoint), CloudTranslation::TrimSecret(configured.api_key),
+            CloudTranslation::TrimSecret(configured.model)};
+}
+
 void PersistGloss(const EnglishIme::TranslationQuery &query, const std::string &gloss,
                   const std::string &target_language)
 {
@@ -198,6 +215,7 @@ std::vector<std::string> TranslateWithProvider(Provider provider, const TencentT
 
 void TranslateGroup(Provider provider, const TencentTmt::Credentials &credentials,
                     const CustomTranslation::Config &custom, const NiuTransTranslation::Config &niutrans,
+                    const GlmTranslation::Config &glm, uint64_t job,
                     const std::vector<EnglishIme::TranslationQuery> &group, const std::string &source,
                     const std::string &target, const std::string &target_language, const std::string &provider_scope,
                     std::vector<EnglishIme::TranslationResult> &out)
@@ -206,7 +224,19 @@ void TranslateGroup(Provider provider, const TencentTmt::Credentials &credential
     texts.reserve(group.size());
     for (const auto &query : group)
         texts.push_back(query.key);
-    const auto translated = TranslateWithProvider(provider, credentials, custom, niutrans, texts, source, target);
+    std::vector<std::string> translated;
+    if (provider == Provider::Glm)
+    {
+        std::string error;
+        translated = GlmTranslation::TextTranslateBatch(glm, texts, source, target, &error,
+                                                        [job] { return !g_running || g_job.load() != job; });
+        // Network errors, malformed output and cancellation are not dictionary misses.
+        // Avoid poisoning the negative cache for eight minutes after a transient failure.
+        if (!error.empty())
+            return;
+    }
+    else
+        translated = TranslateWithProvider(provider, credentials, custom, niutrans, texts, source, target);
     ApplyTranslatedGroup(group, translated, target_language, provider_scope, out);
 }
 
@@ -244,14 +274,17 @@ void WorkerLoop()
         const Provider provider = ActiveProvider();
         const auto custom = ResolveCustomConfig();
         const auto niutrans = ResolveNiuTransConfig();
+        const auto glm = ResolveGlmConfig();
         const auto credentials = provider == Provider::Tencent ? ResolveCredentials() : TencentTmt::Credentials{};
         if ((provider == Provider::Custom && !CustomTranslation::IsSupportedEndpoint(custom.endpoint)) ||
             (provider == Provider::NiuTrans && !NiuTransTranslation::IsUsableConfig(niutrans)) ||
+            (provider == Provider::Glm && !GlmTranslation::IsUsableConfig(glm)) ||
             (provider == Provider::Tencent && !CloudTranslation::IsUsableSecret(credentials.secret_id)))
             continue;
 
         const std::string target_language = TargetLanguage();
-        const std::string provider_scope = ProviderScope();
+        const std::string provider_scope =
+            provider == Provider::Glm ? "glm:" + glm.endpoint + ":" + glm.model : ProviderScope();
         std::vector<EnglishIme::TranslationQuery> en_zh;
         std::vector<EnglishIme::TranslationQuery> zh_target;
         std::vector<EnglishIme::TranslationResult> results;
@@ -284,11 +317,11 @@ void WorkerLoop()
         }
 
         if (!en_zh.empty())
-            TranslateGroup(provider, credentials, custom, niutrans, en_zh, "en", "zh", target_language, provider_scope,
-                           results);
+            TranslateGroup(provider, credentials, custom, niutrans, glm, observed_job, en_zh, "en", "zh",
+                           target_language, provider_scope, results);
         if (!zh_target.empty())
-            TranslateGroup(provider, credentials, custom, niutrans, zh_target, "zh", target_language, target_language,
-                           provider_scope, results);
+            TranslateGroup(provider, credentials, custom, niutrans, glm, observed_job, zh_target, "zh", target_language,
+                           target_language, provider_scope, results);
         if (results.empty() || !g_running || g_job.load() != observed_job ||
             !EnglishIme::IsTranslationCurrent(generation) || !g_callback)
             continue;

@@ -786,5 +786,23 @@
     "direction": "client",
     "surface": "settings",
     "valid": false
+  },
+  {
+    "name": "GLM translation credential test",
+    "message": {
+      "type": "apiCredentialTest",
+      "protocolVersion": 1,
+      "data": {
+        "requestId": "glm-test",
+        "service": "translation.glm",
+        "config": {
+          "model": "glm-5.3-flashx",
+          "apiKey": "test-only-key"
+        }
+      }
+    },
+    "valid": true,
+    "surface": "settings",
+    "direction": "client"
   }
 ]

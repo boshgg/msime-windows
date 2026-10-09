@@ -53,22 +53,52 @@ try {
     New-Item -ItemType Directory -Force (Split-Path $releaseBinary) | Out-Null
     New-Item -ItemType Directory -Force (Split-Path $releaseManifest) | Out-Null
     [IO.File]::WriteAllText($releaseBinary, 'binary')
-    [IO.File]::WriteAllText($releaseManifest, '<assembly><trustInfo><requestedPrivileges><requestedExecutionLevel uiAccess="true" /></requestedPrivileges></trustInfo></assembly>')
+    [IO.File]::WriteAllText($releaseManifest, '<assembly><trustInfo><requestedPrivileges><requestedExecutionLevel level="asInvoker" uiAccess="true" /></requestedPrivileges></trustInfo></assembly>')
+    $sourceManifestText = [IO.File]::ReadAllText($releaseManifest)
     $global:MsimeManifestArguments = @()
     $global:MsimeManifestExit = 0
+    $global:MsimeEmbeddedManifest = ''
+    $global:MsimeForceReadback = ''
     $expectedInputResource = '-inputresource:' + $releaseBinary + ';#1'
     function global:Invoke-MsimeManifestProbe {
         $global:MsimeManifestArguments = @($args)
-        $global:LASTEXITCODE = 0
+        $global:LASTEXITCODE = $global:MsimeManifestExit
+        if ($args.Count -eq 3 -and $args[0] -eq '-manifest') {
+            $global:MsimeEmbeddedManifest = [IO.File]::ReadAllText($args[1])
+        }
         if ($args.Count -eq 2 -and $args[0] -like '-inputresource:*;#1') {
             $outPath = ($args[1] -replace '^-out:', '')
-            [IO.File]::WriteAllText($outPath, '<assembly><requestedExecutionLevel uiAccess="true" /></assembly>')
+            $readback = if ($global:MsimeForceReadback) { $global:MsimeForceReadback } else { $global:MsimeEmbeddedManifest }
+            [IO.File]::WriteAllText($outPath, $readback)
         }
     }
     & (Join-Path $ciScripts 'embed-server-manifest.ps1') -BuildDir 'server/build-release/bin/Release' -ManifestTool Invoke-MsimeManifestProbe
     if ($global:MsimeManifestArguments.Count -ne 2 -or $global:MsimeManifestArguments[0] -ne $expectedInputResource) {
         throw 'CI manifest embedding did not verify resource 1'
     }
+    if ($global:MsimeEmbeddedManifest -notmatch 'uiAccess="true"') {
+        throw 'Default signed manifest no longer requests uiAccess'
+    }
+    & (Join-Path $ciScripts 'embed-server-manifest.ps1') -BuildDir 'server/build-release/bin/Release' -UiAccess false -ManifestTool Invoke-MsimeManifestProbe
+    if ($global:MsimeEmbeddedManifest -notmatch 'uiAccess="false"' -or
+        $global:MsimeEmbeddedManifest -notmatch 'level="asInvoker"') {
+        throw 'Unsigned manifest did not disable uiAccess at normal user integrity'
+    }
+    if ([IO.File]::ReadAllText($releaseManifest) -ne $sourceManifestText) {
+        throw 'Unsigned packaging changed the source manifest used by signed builds'
+    }
+    $global:MsimeForceReadback = $sourceManifestText
+    $rejected = $false
+    try { & (Join-Path $ciScripts 'embed-server-manifest.ps1') -BuildDir 'server/build-release/bin/Release' -UiAccess false -ManifestTool Invoke-MsimeManifestProbe }
+    catch { $rejected = $_.Exception.Message -eq 'Embedded Server manifest does not set uiAccess=false.' }
+    if (-not $rejected) { throw 'Unsigned packaging accepted a stale uiAccess=true resource' }
+    $global:MsimeForceReadback = ''
+    $global:MsimeManifestExit = 31
+    $rejected = $false
+    try { & (Join-Path $ciScripts 'embed-server-manifest.ps1') -BuildDir 'server/build-release/bin/Release' -UiAccess false -ManifestTool Invoke-MsimeManifestProbe }
+    catch { $rejected = $_.Exception.Message -eq 'Server manifest embedding failed (31)' }
+    if (-not $rejected) { throw 'Unsigned packaging accepted a failed manifest write' }
+    $global:MsimeManifestExit = 0
     Remove-Item Function:/cmake
     # Each installer entry must stop before staging/signing when the settings build fails.
     foreach ($relative in @('windows/scripts/lcompile-release-both.ps1', 'server/scripts/lcompile-release.ps1')) {
@@ -94,6 +124,6 @@ try {
 } finally {
     Set-Location $originalLocation
     Remove-Item Function:/cmake, Function:/pnpm, Function:/Invoke-MsimeManifestProbe -ErrorAction SilentlyContinue
-    Remove-Variable MsimeBuildCalls, MsimeFailAt, MsimeManifestExit, MsimeManifestArguments -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable MsimeBuildCalls, MsimeFailAt, MsimeManifestExit, MsimeManifestArguments, MsimeEmbeddedManifest, MsimeForceReadback -Scope Global -ErrorAction SilentlyContinue
     if (Test-Path $fixture) { Remove-Item $fixture -Recurse -Force }
 }

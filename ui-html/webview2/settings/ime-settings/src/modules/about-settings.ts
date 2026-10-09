@@ -1,15 +1,11 @@
 import { serializeHostMessage } from '../../../../shared/messages';
 import { updateConfig } from './config-sync';
 import { setupToggleButton } from './shared';
-import type { UpdateManifest, ValidatedUpdate } from './update-manifest';
-import { compareVersions, describeInstallerTrust, mirrorDownloadUrl, parseVersion, validateManifest } from './update-manifest';
+import type { ValidatedUpdate } from './update-manifest';
+import { compareVersions, describeInstallerTrust, FORK_LATEST_RELEASE_API, FORK_RELEASES_PAGE_URL, parseVersion, validateGitHubRelease } from './update-manifest';
 
-const UPDATE_MANIFEST_URL = 'https://msime.app/update.json';
-const RELEASES_PAGE_URL = 'https://github.com/metasequoiaime/MSIME-Windows/releases';
-// msime.app's download mirror (Aliyun OSS, Hong Kong). GitHub release downloads from mainland China often run at tens of KB/s.
-const DOWNLOAD_MIRROR_PREFIX = 'https://dl.msime.app/gh/';
 const LICENSE_URL = 'https://github.com/metasequoiaime/MSIME-Windows/blob/main/LICENSE';
-const PRIVACY_URL = 'https://github.com/metasequoiaime/MSIME-Windows/blob/main/PRIVACY.md';
+const PRIVACY_URL = 'https://github.com/boshgg/msime-windows/blob/main/PRIVACY.md';
 const REQUEST_TIMEOUT_MS = 10000;
 
 function postExternalUrl(url: string): void {
@@ -111,8 +107,9 @@ export function setupAboutSettings(): void {
     return;
   }
 
-  let releaseUrl = RELEASES_PAGE_URL;
-  let mirrorUrl: string | null = null;
+  let releaseUrl = FORK_RELEASES_PAGE_URL;
+  // The upstream mirror does not distribute this fork's installers.
+  mirrorButton.hidden = true;
 
   const setStatus = (message: string, kind: 'idle' | 'success' | 'error' = 'idle') => {
     statusLabel.textContent = message;
@@ -123,13 +120,6 @@ export function setupAboutSettings(): void {
   downloadButton.addEventListener('click', () => {
     setDialogOpen(dialog, false);
     postExternalUrl(releaseUrl);
-  });
-  mirrorButton.addEventListener('click', () => {
-    if (!mirrorUrl) {
-      return;
-    }
-    setDialogOpen(dialog, false);
-    postExternalUrl(mirrorUrl);
   });
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog) {
@@ -152,25 +142,23 @@ export function setupAboutSettings(): void {
     const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     try {
-      const response = await fetch(`${UPDATE_MANIFEST_URL}?t=${Date.now()}`, {
+      const response = await fetch(FORK_LATEST_RELEASE_API, {
         cache: 'no-store',
+        headers: { Accept: 'application/vnd.github+json' },
         signal: controller.signal
       });
       if (!response.ok) {
-        throw new Error(`Update manifest returned ${response.status}`);
+        throw new Error(`GitHub release API returned ${response.status}`);
       }
 
-      const manifest = await response.json() as UpdateManifest;
-      const update = validateManifest(manifest, RELEASES_PAGE_URL);
+      const update = validateGitHubRelease(await response.json());
       if (!update) {
-        throw new Error('Invalid update manifest');
+        throw new Error('Invalid fork release metadata');
       }
 
       const latest = update.version;
       if (compareVersions(latest, currentVersion) > 0) {
         releaseUrl = update.releaseUrl;
-        mirrorUrl = mirrorDownloadUrl(update, DOWNLOAD_MIRROR_PREFIX);
-        mirrorButton.hidden = mirrorUrl === null;
         dialogVersion.textContent = `v${latest.display}`;
         renderInstallerTrust(dialogTrust, update);
         setStatus(`发现新版本 v${latest.display}`, 'success');

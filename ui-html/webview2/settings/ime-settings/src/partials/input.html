@@ -284,13 +284,14 @@
       <div class="section-header translation-language-row">
         <div>
           <div class="section-title">在线翻译服务</div>
-          <div class="input-setting-description">可使用腾讯云、小牛翻译，或填写自己部署的 DeepLX 兼容接口</div>
+          <div class="input-setting-description">可使用智谱 GLM、腾讯云、小牛翻译，或填写自己部署的 DeepLX 兼容接口</div>
         </div>
         <div class="dropdown">
           <button class="dropdown-toggle translation-language-toggle" id="translationProviderBtn">
             <span>腾讯云</span><img src="./assets/arrow.svg" alt="▼">
           </button>
           <div class="dropdown-menu translation-language-menu" id="translationProviderMenu">
+            <div class="dropdown-item" data-value="glm">智谱 GLM</div>
             <div class="dropdown-item" data-value="tencent">腾讯云</div>
             <div class="dropdown-item" data-value="niutrans">小牛翻译</div>
             <div class="dropdown-item" data-value="custom">自定义 DeepLX</div>
@@ -325,7 +326,7 @@
       <div id="tencentTranslationFields">
         <div class="translation-api-heading">
           <div class="section-title">腾讯云 API 凭据</div>
-          <div class="input-setting-description">用于在线机器翻译，凭据仅保存在本机配置文件中</div>
+          <div class="input-setting-description">用于在线机器翻译，SecretKey 通过 Windows DPAPI 加密保存在本机</div>
         </div>
         <div class="translation-api-grid">
           <label class="translation-api-field">
@@ -355,7 +356,7 @@
       <div id="niutransTranslationFields" hidden>
         <div class="translation-api-heading">
           <div class="section-title">小牛翻译 API 凭据</div>
-          <div class="input-setting-description">在“控制台—>API应用”中查看，凭据仅保存在本机配置文件中</div>
+          <div class="input-setting-description">在“控制台—>API应用”中查看，API Key 通过 Windows DPAPI 加密保存在本机</div>
         </div>
         <div class="translation-api-grid">
           <label class="translation-api-field">
@@ -379,6 +380,41 @@
                 </svg>
               </button>
             </span>
+          </label>
+        </div>
+      </div>
+      <div id="glmTranslationFields" hidden>
+        <div class="translation-api-heading">
+          <div class="section-title">智谱 GLM 翻译</div>
+          <div class="input-setting-description">默认使用 GLM-5.3-FlashX 高速模型，以轻量思考生成简短译文。请使用智谱开放平台 API Key；此模型暂不支持 Coding Plan 套餐。</div>
+        </div>
+        <div class="translation-api-grid">
+          <label class="translation-api-field">
+            <span>模型</span>
+            <input id="glmTranslationModel" type="text" autocomplete="off" spellcheck="false" placeholder="glm-5.3-flashx">
+          </label>
+          <label class="translation-api-field">
+            <span>API Key</span>
+            <span class="translation-secret-input">
+              <input id="glmTranslationApiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="智谱 API Key">
+              <button id="glmTranslationApiKeyVisibility" class="translation-secret-toggle" type="button"
+                aria-label="显示 API Key" aria-pressed="false" title="显示 API Key">
+                <svg class="translation-secret-icon translation-secret-icon-show" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                  <circle cx="12" cy="12" r="2.6"></circle>
+                </svg>
+                <svg class="translation-secret-icon translation-secret-icon-hide" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m3 3 18 18"></path>
+                  <path d="M10.6 6.1A9.6 9.6 0 0 1 12 6c6 0 9.5 6 9.5 6a16 16 0 0 1-2.2 3"></path>
+                  <path d="M6.2 6.3C3.8 8.1 2.5 12 2.5 12s3.5 6 9.5 6a9 9 0 0 0 3-.5"></path>
+                </svg>
+              </button>
+            </span>
+          </label>
+          <label class="translation-api-field translation-api-field-wide">
+            <span>接口地址</span>
+            <input id="glmTranslationEndpoint" type="url" autocomplete="off" spellcheck="false"
+              placeholder="https://open.bigmodel.cn/api/paas/v4/chat/completions">
           </label>
         </div>
       </div>
@@ -413,6 +449,7 @@
           </label>
         </div>
       </div>
+      <div class="input-setting-description">翻译密钥通过 Windows DPAPI 加密保存，绑定当前 Windows 账户。旧版明文密钥会自动迁移；更换账户或电脑后需重新填写。</div>
       <div class="translation-api-warning" id="candidateTranslationApiWarning" role="status">请填写 SecretId 和 SecretKey 后使用云端翻译</div>
       <div class="credential-test-row">
         <button id="candidateTranslationTestButton" class="credential-test-button" type="button">测试配置</button>

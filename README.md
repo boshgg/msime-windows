@@ -1,4 +1,8 @@
-# 水杉输入法
+# 水杉输入法（GLM 增强版）
+
+本 fork 增加智谱 GLM-5.3 AI 联想、GLM-5.3-FlashX 候选翻译，以及 Windows DPAPI 密钥加密。安装包见 [boshgg/msime-windows Releases](https://github.com/boshgg/msime-windows/releases)。
+
+**本 fork v0.8.0 为未签名版本。** 安装包由 GitHub 托管 CI 构建，未使用正式 Authenticode 证书。包内 Server 使用 `asInvoker`、`uiAccess=false`，支持以普通用户身份启动，但不具备 UIAccess 权限，候选窗无法覆盖管理员权限窗口。Windows 可能显示信誉或未知发布者提示。上游的 SignPath 签名政策不适用于本 fork 的产物。
 
 [官网](https://msime.app) · [用户文档](https://msime.app/docs/) · [隐私说明](PRIVACY.md) · [代码签名策略 / Code signing policy](docs/code-signing-policy.md) · [English README](README.en.md)
 
@@ -15,7 +19,7 @@
 
 ## 下载与安装
 
-- **安装包**：[Releases](https://github.com/metasequoiaime/MSIME-Windows/releases)，或[官网下载页](https://msime.app/download/)
+- **本 fork 安装包**：[Releases](https://github.com/boshgg/msime-windows/releases)
 - **安装步骤与常见问题**：[docs/installation.md](docs/installation.md)
 
 安装后用 `Win + 空格` 切换到水杉输入法。如果切换不过去、Server 反复退出或设置窗口一闪即关，多半是缺少 Visual C++ 2015–2022 Redistributable（**x64**），处理办法见安装文档的常见问题。
@@ -68,7 +72,7 @@ Windows 端的全部一方源码都在本仓，一次 clone 就能拿到完整�
 - 中文输入：全拼、双拼（小鹤 / 自然码 / 首道 / 微软 / 搜狗 / 紫光 / 智能ABC / 国标 / 拼音加加）、86 五笔。
 - 日文输入：罗马字方案，提供平假名、片假名和日语词库候选；中文状态下也可用临时日语（R 模式）。
 - 拼音方案支持辅助码（蓝天小雨点、自然码、首右 2.0、首右 Plus、小鹤、拼音加加），也可以导入自己的辅助码方案。
-- 支持谷歌云候选、AI 联想（DeepSeek / OpenAI / SiliconFlow / Groq）。
+- 支持谷歌云候选、AI 联想（智谱 GLM / DeepSeek / OpenAI / SiliconFlow / Groq）。
 - 竖排候选窗支持中英互译释义；本地未命中时可走腾讯云机器翻译。
 - 候选混输（总开关 + 分项开关）：英文、emoji、颜文字、快捷短语、日期时间；独立英文候选输入模式。
 - 词库管理：全拼 / 五笔 / 英文查询、新增、批量导入与导出。
@@ -199,11 +203,11 @@ Windows 端的全部一方源码都在本仓，一次 clone 就能拿到完整�
 
 全拼和双拼输入时可异步请求 AI 联想。返回内容如果不与本地以及云联想重复，会插入首页第三项。接口异常时不影响本地候选。
 
-提供商可选 DeepSeek、OpenAI、SiliconFlow、Groq，均走 OpenAI 兼容的 Chat Completions 接口。每个提供商的 Token 分开保存。可配置模型、候选数量上限、接口地址，以及最多三套自定义提示词。
+提供商可选智谱 GLM、DeepSeek、OpenAI、SiliconFlow、Groq 或 Custom，均走 OpenAI 兼容的 Chat Completions 接口。选择智谱 GLM 后默认使用 `glm-5.3` 和国内按量 API，采用低思考强度适配交互场景。每个提供商的 Token 分开保存，并由 Windows 当前账户 DPAPI 加密。可配置模型、候选数量上限、接口地址，以及最多三套自定义提示词。
 
 ### 候选词翻译
 
-开启后，在横排和竖排候选窗口中都会为候选项显示中文与所选语种的互译，每项最多两个简短释义。优先使用本地释义；本地未命中时可选择腾讯云 TMT，或填写自建 DeepLX 兼容服务的完整接口地址和可选 Bearer API Key，由云端补全。凭据只保存在本机配置文件中。
+开启后，在横排和竖排候选窗口中都会为候选项显示中文与所选语种的互译，每项最多两个简短释义。优先使用本地释义；本地未命中时可选择腾讯云 TMT，或填写自建 DeepLX 兼容服务的完整接口地址和可选 Bearer API Key，由云端补全。也支持智谱 GLM，默认 `glm-5.3-flashx`，同一方向的候选词合并为一次请求并复用缓存。端点与模型可编辑；实际速度取决于网络与服务负载。凭据由 Windows 当前账户 DPAPI 加密保存在本机。首次读取会迁移旧的明文密钥；更换 Windows 账户或电脑后请重新填写，旧版本无法读取密文。
 
 ### 候选项调频
 
@@ -340,9 +344,9 @@ Server 启动时会同时启动 Watchdog。服务意外退出后，Watchdog 会�
 
 ## 代码签名策略
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+本 fork v0.8.0 未签名。上游项目的签名服务署名为：Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/)。
 
-签名范围、团队角色（Committers / Reviewers / Approvers）、构建与发布流程以及当前状态见 [Code signing policy](docs/code-signing-policy.md)，隐私说明见 [PRIVACY.md](PRIVACY.md)。
+本 fork 的发布状态与保留的上游签名政策分别见 [Code signing policy](docs/code-signing-policy.md)，隐私说明见 [PRIVACY.md](PRIVACY.md)。
 
 ## 开源协议
 
@@ -370,3 +374,7 @@ GPL-3.0。
   <img src="https://api.star-history.com/svg?repos=metasequoiaime/MSIME-Windows&type=Date" alt="Star History Chart" width="600">
 </a>
 <!-- star-history:end -->
+
+### 加密配置恢复
+
+DPAPI 密文绑定 Windows 账户。复制配置到另一账户或电脑后，如果无法加载或保存，请先保留一份 `config.toml` 密文副本，再用文本编辑器将所有无法解密的 `dpapi:...` 凭据值改为 `""`，保留其他设置。重新打开设置后逐项填写 API Key。不要直接安装旧版本读取密文。

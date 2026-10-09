@@ -128,6 +128,14 @@ enabled = false
 app_id = ""
 apikey = ""
 
+# 智谱 GLM 批量翻译；本地词库优先。FlashX 为高速按量计费模型。
+# API Key 由 Windows 当前用户 DPAPI 加密保存；切换账户后请重新填写。
+[glm_translation]
+enabled = false
+endpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+api_key = ""
+model = "glm-5.3-flashx"
+
 #
 # 网络代理：云输入、模型下载、AI 联想、翻译、语音识别等需要联网的功能共用。
 # proxy_mode：system 跟随系统代理设置 / none 不使用代理（直连）/ custom 使用下面的 HTTP 代理。
@@ -425,6 +433,7 @@ asr_model = ""
 # 均走 OpenAI 兼容的 /v1/chat/completions。
 polish_provider = "deepseek"
 # 请自行填写各提供商的 API Token，不要把真实密钥写进仓库。
+# 真实密钥在首次读取及保存时由 Windows 当前用户 DPAPI 加密。
 polish_token = "FAKESECRET_q2r3s4t5u6v7w8x9y0z1"
 polish_token_siliconflow = "<YOUR_POLISH_TOKEN_SILICONFLOW>"
 polish_token_openai = "<YOUR_POLISH_TOKEN_OPENAI>"
@@ -494,12 +503,14 @@ v_mode = true # V 模式：V 后接数字转中文（V123 → 一百二十三，
 enabled = true
 provider = "deepseek"
 # 请自行填写各提供商的 API Token，不要把真实密钥写进仓库。
+# 真实密钥在首次读取及保存时由 Windows 当前用户 DPAPI 加密。
 token = "FAKESECRET_e1f2g3h4i5j6k7l8m9n0"
 token_deepseek = "<YOUR_AI_TOKEN_DEEPSEEK>"
 token_openai = "<YOUR_AI_TOKEN_OPENAI>"
 token_siliconflow = "<YOUR_AI_TOKEN_SILICONFLOW>"
 token_groq = "<YOUR_AI_TOKEN_GROQ>"
 token_custom = "<YOUR_AI_TOKEN_CUSTOM>"
+token_glm = "<YOUR_AI_TOKEN_GLM>"
 endpoint = "https://api.deepseek.com/chat/completions"
 model = "deepseek-v4-flash"
 # 空槽位使用提供商默认值，旧版 endpoint/model 只归属于当前提供商
@@ -508,11 +519,13 @@ endpoint_openai = ""
 endpoint_siliconflow = ""
 endpoint_groq = ""
 endpoint_custom = ""
+endpoint_glm = ""
 model_deepseek = ""
 model_openai = ""
 model_siliconflow = ""
 model_groq = ""
 model_custom = ""
+model_glm = ""
 candidate_limit = 3
 prompt_id = "custom_1"
 prompt = """你是一个中文全拼输入法联想引擎。输入为已经切分好的拼音数组、前文上下文和候选数量。

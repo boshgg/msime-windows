@@ -10,6 +10,10 @@ const fields: Record<string, string> = {
 };
 
 const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
+  glm: {
+    endpoint: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+    model: 'glm-5.3'
+  },
   deepseek: {
     endpoint: 'https://api.deepseek.com/chat/completions',
     model: 'deepseek-v4-flash'
@@ -32,7 +36,7 @@ const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
   }
 };
 
-const PROVIDERS = ['deepseek', 'openai', 'siliconflow', 'groq', 'custom'] as const;
+const PROVIDERS = ['deepseek', 'glm', 'openai', 'siliconflow', 'groq', 'custom'] as const;
 let tokens: Record<string, string> = {};
 let endpoints: Record<string, string> = {};
 let models: Record<string, string> = {};
@@ -81,6 +85,7 @@ function switchProvider(provider: string): void {
   }
   currentProvider = provider;
   if (token) token.value = tokens[provider] ?? '';
+  hideToken();
   updateConfig('ai_assistant.provider', provider);
   applyProviderFields(provider);
   clearModelMenu();
@@ -181,6 +186,15 @@ function setupTokenVisibilityToggle(): void {
   });
 }
 
+function hideToken(): void {
+  const token = document.getElementById('aiToken') as HTMLInputElement | null;
+  const toggle = document.getElementById('aiTokenVisibility') as HTMLButtonElement | null;
+  if (token) token.type = 'password';
+  toggle?.setAttribute('aria-pressed', 'false');
+  toggle?.setAttribute('aria-label', '显示 API Token');
+  if (toggle) toggle.title = '显示 API Token';
+}
+
 export function applyAiConfig(config: Record<string, unknown>): void {
   Object.entries(fields).forEach(([id, key]) => {
     const element = document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null;
@@ -199,7 +213,9 @@ export function applyAiConfig(config: Record<string, unknown>): void {
   });
   const token = document.getElementById('aiToken') as HTMLInputElement | null;
   if (token) token.value = tokens[currentProvider] ?? '';
+  hideToken();
   applyDropdownValue('aiProviderBtn', 'aiProviderMenu', currentProvider);
+  applyProviderFields(currentProvider);
   const defaults = PROVIDER_DEFAULTS[currentProvider];
   const model = document.getElementById('aiModel') as HTMLInputElement | null;
   if (model && defaults) model.placeholder = defaults.model;

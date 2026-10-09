@@ -1,11 +1,11 @@
 // 升级时以安装包出厂模板为骨架重建用户配置：模板合并、凭证兜底重放、损坏配置的留证与抢救，
 // 以及旧 ACP 乱码目录的配置找回。
 #include "config/ime_config_internal.h"
+#include "config/credential_store.h"
 #include <fmt/xchar.h>
 #include <Windows.h>
 #include <filesystem>
 #include <map>
-#include <set>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -20,17 +20,6 @@ namespace
 // （token_<provider> / asr_token[_<provider>] / polish_token[_<provider>]）。这类值一旦丢失，
 // 用户就得重新去各家控制台申请再填一遍，是升级里代价最高的配置，所以单独兜底：不管模板怎么漂移、
 // 文件是否损坏，只要用户填过真值就一条都不能丢。
-bool IsCredentialKey(const std::string &key)
-{
-    static const std::set<std::string> exact = {"token",  "api_key",     "apikey",    "secret_id",   "secret_key",
-                                                "app_id", "asr_app_key", "asr_token", "polish_token"};
-    if (exact.count(key) != 0)
-    {
-        return true;
-    }
-    return key.rfind("token_", 0) == 0 || key.rfind("asr_token_", 0) == 0 || key.rfind("polish_token_", 0) == 0;
-}
-
 // 剥掉单行 TOML 字符串两侧的引号。凭证值从不跨行，够用了。
 std::string UnquoteTomlScalar(const std::string &value)
 {
@@ -47,7 +36,7 @@ bool AssignmentHoldsRealCredential(const std::string &assignment_id, const std::
 {
     const size_t separator = assignment_id.find('\x01');
     const std::string key = separator == std::string::npos ? assignment_id : assignment_id.substr(separator + 1);
-    if (!IsCredentialKey(key))
+    if (!ConfigCredentials::IsCredentialKey(key))
     {
         return false;
     }
@@ -134,15 +123,17 @@ std::filesystem::path AcpDecodedUtf8Path(const std::filesystem::path &wide_path)
     }
 }
 
-// 把一份解析不过的 config.toml 原样留证到 config.toml.corrupt-<时间戳>，方便事后排查到底是什么
-// 字符破坏了 TOML，也给用户一个手工找回的机会。备份失败不影响后续流程。
-void BackupCorruptConfig(const std::string &corrupt_text)
+// A malformed document cannot be safely scrubbed field by field. Encrypt the
+// entire recovery copy instead, and keep the original untouched if this fails.
+bool BackupCorruptConfig(const std::string &corrupt_text)
 {
     SYSTEMTIME now{};
     GetLocalTime(&now);
-    const std::wstring name = fmt::format(L"config.toml.corrupt-{:04}{:02}{:02}-{:02}{:02}{:02}", now.wYear, now.wMonth,
-                                          now.wDay, now.wHour, now.wMinute, now.wSecond);
-    WriteFileBytes(g_config_path.parent_path() / name, corrupt_text);
+    const std::wstring name = fmt::format(L"config.toml.corrupt-{:04}{:02}{:02}-{:02}{:02}{:02}.dpapi", now.wYear,
+                                          now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond);
+    std::string encrypted;
+    return ConfigCredentials::Encrypt(corrupt_text, encrypted) &&
+           WriteFileBytes(g_config_path.parent_path() / name, encrypted);
 }
 } // namespace
 
@@ -177,6 +168,12 @@ void RecoverLegacyAcpMangledConfig()
     }
 
     const std::string real_text = ReadFileText(g_config_path);
+    if (!real_text.empty())
+    {
+        std::string checked = real_text;
+        if (!ConfigCredentials::ProtectToml(checked))
+            return;
+    }
     const std::string template_text = ReadFileText(data_dir / kConfigTemplateFileName);
     const bool real_unusable = !TomlTextIsParseable(real_text);
     const bool real_is_stock = !template_text.empty() && real_text == template_text;
@@ -223,7 +220,7 @@ void SyncConfigWithInstalledTemplate()
     const bool config_exists = std::filesystem::is_regular_file(g_config_path, exists_error);
     const auto config_size =
         config_exists ? std::filesystem::file_size(g_config_path, exists_error) : std::uintmax_t{0};
-    const std::string user_text = ReadFileText(g_config_path);
+    std::string user_text = ReadFileText(g_config_path);
     if (!TomlTextIsParseable(user_text))
     {
         if (config_exists && config_size > 0 && user_text.empty())
@@ -237,7 +234,8 @@ void SyncConfigWithInstalledTemplate()
         // 到新模板上；即便整体抢救结果仍解析不过，也只回退到「模板 + 重放凭证」，保住最难重填的 token。
         if (config_exists && config_size > 0)
         {
-            BackupCorruptConfig(user_text);
+            if (!BackupCorruptConfig(user_text))
+                return;
             const std::map<std::string, std::string> salvaged_values = ParseTomlAssignments(user_text);
             const std::string salvaged = MergeTomlIntoTemplate(template_text, salvaged_values, {});
             if (TomlTextIsParseable(salvaged))
@@ -254,6 +252,9 @@ void SyncConfigWithInstalledTemplate()
                 WriteFileTextAtomically(baseline_path, template_text);
                 return;
             }
+            // A damaged/unreadable credential must never be replaced by the
+            // stock template merely because recovery could not decrypt it.
+            return;
         }
         if (WriteFileTextAtomically(g_config_path, template_text))
         {
@@ -261,6 +262,9 @@ void SyncConfigWithInstalledTemplate()
         }
         return;
     }
+
+    if (!ConfigCredentials::ProtectToml(user_text))
+        return;
 
     const std::string baseline_text = ReadFileText(baseline_path);
     if (baseline_text == template_text)

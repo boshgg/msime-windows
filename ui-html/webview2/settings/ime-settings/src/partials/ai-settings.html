@@ -8,7 +8,8 @@
   </div>
   <div class="section ai-section">
     <div class="section-title ai-heading">API 配置</div>
-    <div class="ai-description ai-api-description">DeepSeek、OpenAI、SiliconFlow、Groq 均使用 OpenAI 兼容的 Chat Completions 接口。Custom 用于接入任意兼容服务，填写自己的接口地址与模型。每个提供商的接口地址、Token 和模型分开保存。</div>
+    <div class="ai-description ai-api-description">支持智谱 GLM、DeepSeek、OpenAI、SiliconFlow、Groq 和自定义 OpenAI 兼容服务。智谱默认使用 GLM-5.3，各提供商的接口地址、Token 和模型分开保存。</div>
+    <div class="ai-description ai-api-description">API Token 通过 Windows DPAPI 加密保存在本机，绑定当前 Windows 账户。旧版明文凭据会自动迁移；更换账户或电脑后需重新填写。</div>
     <div class="ai-grid">
       <div class="ai-field">
         <span>服务提供商</span>
@@ -19,6 +20,7 @@
           </button>
           <div class="dropdown-menu" id="aiProviderMenu">
             <div class="dropdown-item" data-value="deepseek">DeepSeek</div>
+            <div class="dropdown-item" data-value="glm">智谱 GLM</div>
             <div class="dropdown-item" data-value="openai">OpenAI</div>
             <div class="dropdown-item" data-value="siliconflow">SiliconFlow</div>
             <div class="dropdown-item" data-value="groq">Groq</div>
