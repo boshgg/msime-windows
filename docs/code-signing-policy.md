@@ -1,8 +1,16 @@
 # Code signing policy
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+## This fork: boshgg/msime-windows v0.8.0
 
-**Current status.** The SignPath Foundation open source program has accepted this project (SignPath project `msime-windows`), and no release has been signed through SignPath yet. Releases up to and including v0.9.3 were built on a maintainer's machine and signed there with the project's Certum Open Source Developer certificate (`CN=Open Source Developer LU FAN`) through SimplySign, using `installer/package-simplysign.ps1`. From now on, releases signed with the SignPath Foundation certificate will be built and signed only by the CI process described below, never on a local machine.
+**This fork's v0.8.0 release is unsigned.** Its installer and project binaries are built on GitHub-hosted CI without an official Authenticode certificate. The packaged Server requests `asInvoker` with `uiAccess=false`: normal-user launch is supported, but UIAccess privileges and candidate-window overlays above elevated applications are unavailable. Windows may display a reputation or unknown-publisher warning. Downloads and their SHA256 are published in [this fork's Releases](https://github.com/boshgg/msime-windows/releases).
+
+## Preserved upstream policy
+
+The remainder of this document records the policy inherited from [metasequoiaime/MSIME-Windows](https://github.com/metasequoiaime/MSIME-Windows). Its signing services, team roles and release history apply to that upstream project, not this fork. The historical status below is retained from the source snapshot and is not a statement about the fork's releases.
+
+**Upstream attribution:** Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+
+**Recorded upstream status.** The SignPath Foundation open source program has accepted the upstream project (SignPath project `msime-windows`), and no release has been signed through SignPath yet. Upstream releases up to and including v0.9.3 were built on a maintainer's machine and signed there with the project's Certum Open Source Developer certificate (`CN=Open Source Developer LU FAN`) through SimplySign, using `installer/package-simplysign.ps1`. Under the recorded policy, releases signed with the SignPath Foundation certificate are built and signed only by the CI process described below, never on a local machine.
 
 ## What gets signed
 

@@ -2,6 +2,8 @@
 
 本 fork 增加智谱 GLM-5.3 AI 联想、GLM-5.3-FlashX 候选翻译，以及 Windows DPAPI 密钥加密。安装包见 [boshgg/msime-windows Releases](https://github.com/boshgg/msime-windows/releases)。
 
+**本 fork v0.8.0 为未签名版本。** 安装包由 GitHub 托管 CI 构建，未使用正式 Authenticode 证书。包内 Server 使用 `asInvoker`、`uiAccess=false`，支持以普通用户身份启动，但不具备 UIAccess 权限，候选窗无法覆盖管理员权限窗口。Windows 可能显示信誉或未知发布者提示。上游的 SignPath 签名政策不适用于本 fork 的产物。
+
 [官网](https://msime.app) · [用户文档](https://msime.app/docs/) · [隐私说明](PRIVACY.md) · [代码签名策略 / Code signing policy](docs/code-signing-policy.md) · [English README](README.en.md)
 
 <!-- badges:start -->
@@ -342,9 +344,9 @@ Server 启动时会同时启动 Watchdog。服务意外退出后，Watchdog 会�
 
 ## 代码签名策略
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+本 fork v0.8.0 未签名。上游项目的签名服务署名为：Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/)。
 
-签名范围、团队角色（Committers / Reviewers / Approvers）、构建与发布流程以及当前状态见 [Code signing policy](docs/code-signing-policy.md)，隐私说明见 [PRIVACY.md](PRIVACY.md)。
+本 fork 的发布状态与保留的上游签名政策分别见 [Code signing policy](docs/code-signing-policy.md)，隐私说明见 [PRIVACY.md](PRIVACY.md)。
 
 ## 开源协议
 

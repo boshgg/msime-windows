@@ -1,5 +1,7 @@
 > This fork adds GLM-5.3 suggestions, GLM-5.3-FlashX batch translation and Windows current-user DPAPI credential protection. Download from [fork releases](https://github.com/boshgg/msime-windows/releases).
 
+**Fork v0.8.0 is unsigned.** It is built on GitHub-hosted CI without an official Authenticode certificate. The packaged Server uses `asInvoker` and `uiAccess=false`, so it can launch as a normal user but has no UIAccess privileges and cannot display candidate windows above elevated applications. Windows may show a reputation or unknown-publisher warning. The upstream SignPath policy does not certify this fork's binaries.
+
 # Metasequoia IME for Windows
 
 [中文 README](README.md) · [Website](https://msime.app) · [Docs](https://msime.app/docs/) · [Privacy](PRIVACY.md) · [Code signing policy](docs/code-signing-policy.md)
@@ -21,9 +23,9 @@ This repository is the whole Windows product: the TSF text service DLL, the resi
 
 ## Install
 
-Download the installer from [Releases](https://github.com/metasequoiaime/MSIME-Windows/releases) or the [download page](https://msime.app/download/), run it, then switch with `Win + Space`.
+Download this fork's installer from [Releases](https://github.com/boshgg/msime-windows/releases), run it, then switch with `Win + Space`.
 
-Current builds are **not code signed**. SmartScreen will block them and uiAccess is unavailable, which means the candidate window cannot float above elevated applications. Verify the download with the SHA256 published on the download page.
+Fork v0.8.0 is **not code signed**. Verify the download with the SHA256 published with the fork release; the unsigned build's UIAccess limitation is described above.
 
 You need the **Microsoft Visual C++ 2015–2022 Redistributable (x64)**. The server and settings app are 64-bit; the x86 redistributable is a separate package and does not substitute for it. If you cannot switch to the IME, the server keeps exiting, or the settings window closes immediately, install that first.
 
@@ -44,7 +46,7 @@ You need the **Microsoft Visual C++ 2015–2022 Redistributable (x64)**. The ser
 
 An input method sees every keystroke, so the boundaries are stated explicitly in [PRIVACY.md](PRIVACY.md): which features reach the network, what each one sends, what the defaults are, and how to turn each off.
 
-Two things worth knowing up front. **Cloud candidates are on by default** — the composition spelling goes to Google's input-tools service, and it is the only network feature that works without you supplying a credential. **API tokens are stored in plain text** in `config.toml`, unlike macOS and Linux which use the Keychain and Secret Service.
+**Cloud candidates are on by default** — the composition spelling goes to Google's input-tools service, and it is the only network feature that works without you supplying a credential. This fork encrypts API credentials in `config.toml` using Windows current-user DPAPI and automatically migrates existing plaintext credentials on load.
 
 There is no telemetry, analytics or crash reporting of any kind.
 
@@ -56,9 +58,9 @@ Note that most issues, documentation and code comments are in Chinese. English p
 
 ## Code signing policy
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+Fork v0.8.0 is unsigned. The upstream project's signing attribution is: Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
 
-What is signed, who the committers, reviewers and approvers are, the build and release process and the current status are in the [code signing policy](docs/code-signing-policy.md). The privacy policy is [PRIVACY.md](PRIVACY.md).
+The [code signing policy](docs/code-signing-policy.md) distinguishes this fork's release status from the preserved upstream policy. The privacy policy is [PRIVACY.md](PRIVACY.md).
 
 ## Licence
 
