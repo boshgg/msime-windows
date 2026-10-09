@@ -21,10 +21,13 @@ vi.mock('./shared', () => ({
 // dynamic imports. This test covers only the backfill guard, so keep their DOM
 // side effects out of it with no-op consumers.
 vi.mock('./appearance', () => ({ applyAppearanceConfig: vi.fn(), updateCandidatePreviewHelpcode: vi.fn() }));
-vi.mock('./skin', () => ({ applyCandidateSkin: vi.fn(), applyCandidateSkinCatalog: vi.fn() }));
+vi.mock('./skin', () => ({
+  applyCandidateSkin: vi.fn(), applyCandidateSkinCatalog: vi.fn(), applyBuiltinSkinPageArrows: vi.fn()
+}));
 vi.mock('./input', () => ({
   applyCustomShuangpinSchemas: vi.fn(),
   applyCustomTranslationConfig: vi.fn(),
+  applyGlmTranslationConfig: vi.fn(),
   applyFrequencyConfig: vi.fn(),
   applyInputConfig: vi.fn(),
   applyNiuTransConfig: vi.fn(),
@@ -43,13 +46,14 @@ vi.mock('./stats', () => ({ applyStatisticsEnabled: vi.fn(), applyStatisticsRete
 vi.mock('./shortcut', () => ({ applyShortcutConfig: vi.fn() }));
 
 import { applyToggleState, setMixedCandidateOptionsDisabled } from './shared';
-import { setupConfigSync } from './config-sync';
+import { notifySettingsModuleReady, setupConfigSync } from './config-sync';
+import { applyGlmTranslationConfig } from './input';
 
 beforeEach(() => {
   handlers.clear();
   vi.clearAllMocks();
   vi.stubGlobal('document', {
-    getElementById: () => ({}),
+    getElementById: () => ({ contains: () => true }),
     querySelector: () => null,
     querySelectorAll: () => [],
     addEventListener: vi.fn()
@@ -98,4 +102,15 @@ it('greys out the mixed candidate sub-switches when the master switch is off', (
   expect(applyToggleState).toHaveBeenCalledWith('dateTimeMenuToggleBtn', false);
   snapshot({ data: { utility: { mixed_candidates: true } } });
   expect(setMixedCandidateOptionsDisabled).toHaveBeenLastCalledWith(false);
+});
+
+it('backfills saved GLM translation settings when the input module is ready', async () => {
+  const config = {
+    enabled: true, endpoint: 'https://glm.example.test/v1/chat/completions',
+    api_key: 'saved-key', model: 'glm-5.3-flashx'
+  };
+  handlers.get('configSnapshot')!({ data: { glm_translation: config } });
+  notifySettingsModuleReady('input');
+  await vi.dynamicImportSettled();
+  expect(applyGlmTranslationConfig).toHaveBeenCalledWith(config);
 });

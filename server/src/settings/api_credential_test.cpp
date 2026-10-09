@@ -1,6 +1,9 @@
 #include "api_credential_test.h"
+#include "ai/chat_completion_request.h"
+#include "config/ime_config.h"
 
 #include "cloud/custom_translation.h"
+#include "cloud/glm_translation.h"
 #include "cloud/niutrans_translation.h"
 #include "cloud/tencent_tmt.h"
 #include "cloud/translation_gloss.h"
@@ -155,20 +158,45 @@ ApiCredentialTest::Result TestChat(const ApiCredentialTest::Request &request)
         return {false, "请先填写有效的 API Key。"};
     if (!IsHttpEndpoint(endpoint) || model.empty())
         return {false, "请填写有效的 HTTPS 接口地址和模型名。"};
-    nlohmann::json body = {{"model", model},
-                           {"stream", false},
-                           {"max_tokens", 1},
-                           {"messages", {{{"role", "user"}, {"content", "Reply OK"}}}}};
     const std::string provider = Value(request, "provider");
-    if (provider == "deepseek")
-        body["thinking"] = {{"type", "disabled"}};
-    else if (provider == "siliconflow")
-        body["enable_thinking"] = false;
+    if (provider == "glm" &&
+        (endpoint.rfind("https://", 0) != 0 || token.find_first_of("\r\n\0", 0, 3) != std::string::npos))
+        return {false, "GLM 必须使用 HTTPS 接口地址和有效的 API Key。"};
+    const bool assistant = request.service == "ai.assistant";
+    nlohmann::json messages = {{{"role", "user"}, {"content", "Reply OK"}}};
+    if (assistant)
+    {
+        const nlohmann::json input = {{"segmented_pinyin", {"ni", "hao"}}, {"context", ""}, {"candidate_limit", 1}};
+        messages = {{{"role", "system"}, {"content", AiAssistantConfig{}.prompt}},
+                    {{"role", "user"}, {"content", input.dump()}}};
+    }
+    const auto body = ChatCompletion::BuildRequest(provider, model, messages,
+                                                   provider == "glm" ? 4096
+                                                   : assistant       ? 512
+                                                                     : 16,
+                                                   assistant);
     const std::string payload = body.dump();
     const HttpResponse response = PerformJsonRequest(endpoint, token, &payload);
-    if (response.code == CURLE_OK && response.status >= 200 && response.status < 300)
-        return {true, "连接成功，API Key 和模型配置有效。"};
-    return {false, "测试失败：" + ErrorDetail(response)};
+    if (response.code != CURLE_OK || response.status < 200 || response.status >= 300)
+        return {false, "测试失败：" + ErrorDetail(response)};
+    const auto completion = ChatCompletion::ParseContent(response.body);
+    if (!completion.error.empty())
+        return {false, "测试失败：" + completion.error};
+    if (assistant)
+    {
+        try
+        {
+            const auto result = nlohmann::json::parse(completion.content);
+            const auto &candidates = result.at("candidates");
+            if (!candidates.is_array() || candidates.empty() || candidates.at(0).value("text", std::string()).empty())
+                return {false, "连接成功，但模型未返回有效的输入法候选词。"};
+        }
+        catch (...)
+        {
+            return {false, "连接成功，但模型未返回输入法要求的 JSON 候选词格式。"};
+        }
+    }
+    return {true, "连接成功，API Key、模型和回答格式有效。"};
 }
 
 void AppendLe16(std::vector<unsigned char> &out, std::uint16_t value)
@@ -259,7 +287,18 @@ ApiCredentialTest::Result TestBatchAsr(const ApiCredentialTest::Request &request
 ApiCredentialTest::Result TestTranslation(const ApiCredentialTest::Request &request)
 {
     std::vector<std::string> translated;
-    if (request.service == "translation.tencent")
+    if (request.service == "translation.glm")
+    {
+        const GlmTranslation::Config config{Value(request, "endpoint"), Value(request, "apiKey"),
+                                            Value(request, "model")};
+        if (!GlmTranslation::IsUsableConfig(config))
+            return {false, "请先填写有效的 GLM 接口地址、API Key 和模型名。"};
+        std::string error;
+        translated = GlmTranslation::TextTranslateBatch(config, {"测试", "输入法"}, "zh", "en", &error);
+        if (!error.empty())
+            return {false, "测试失败：" + error};
+    }
+    else if (request.service == "translation.tencent")
     {
         const TencentTmt::Credentials credentials{Value(request, "secretId"), Value(request, "secretKey"),
                                                   "ap-guangzhou"};

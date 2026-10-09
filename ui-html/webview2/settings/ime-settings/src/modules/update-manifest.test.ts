@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareVersions, describeInstallerTrust, mirrorDownloadUrl, parseVersion, validateManifest } from './update-manifest';
+import { compareVersions, describeInstallerTrust, FORK_RELEASES_PAGE_URL, mirrorDownloadUrl, parseVersion, validateGitHubRelease, validateManifest } from './update-manifest';
 
 const RELEASES = 'https://github.com/metasequoiaime/MSIME-Windows/releases';
 const DIGEST = 'a'.repeat(64);
@@ -114,5 +114,75 @@ describe('mirrorDownloadUrl', () => {
     expect(noInstaller && mirrorDownloadUrl(noInstaller, MIRROR)).toBeNull();
     const pageOnly = validateManifest(manifest({ releaseUrl: RELEASES }), RELEASES);
     expect(pageOnly && mirrorDownloadUrl(pageOnly, MIRROR)).toBeNull();
+  });
+});
+
+const githubAsset = (overrides: Record<string, unknown> = {}) => ({
+  name: 'MetasequoiaIME_Setup_v0.3.2-unsigned.exe',
+  browser_download_url: `${FORK_RELEASES_PAGE_URL}/download/v0.3.2/MetasequoiaIME_Setup_v0.3.2-unsigned.exe`,
+  state: 'uploaded', size: 1024, digest: `sha256:${DIGEST}`,
+  ...overrides
+});
+
+const githubRelease = (overrides: Record<string, unknown> = {}) => ({
+  tag_name: 'v0.3.2', html_url: `${FORK_RELEASES_PAGE_URL}/tag/v0.3.2`,
+  draft: false, prerelease: false, assets: [githubAsset()], ...overrides
+});
+
+describe('validateGitHubRelease', () => {
+  it('takes the installer digest from the exact uploaded fork release asset', () => {
+    const update = validateGitHubRelease(githubRelease());
+    expect(update).toEqual({
+      version: { display: '0.3.2', parts: [0, 3, 2] },
+      releaseUrl: `${FORK_RELEASES_PAGE_URL}/tag/v0.3.2`,
+      installerName: 'MetasequoiaIME_Setup_v0.3.2-unsigned.exe',
+      installerSha256: DIGEST, signed: false
+    });
+    expect(mirrorDownloadUrl(update!, 'https://dl.msime.app/gh/')).toBeNull();
+  });
+
+  it('rejects upstream, lookalike, mismatched and unpublished releases', () => {
+    for (const html_url of [
+      `${RELEASES}/tag/v0.3.2`, `${FORK_RELEASES_PAGE_URL}.evil.test/tag/v0.3.2`,
+      `${FORK_RELEASES_PAGE_URL}/tag/v0.3.1`, `${FORK_RELEASES_PAGE_URL}/tag/v0.3.2/../latest`
+    ]) expect(validateGitHubRelease(githubRelease({ html_url }))).toBeNull();
+    expect(validateGitHubRelease(githubRelease({ draft: true }))).toBeNull();
+    expect(validateGitHubRelease(githubRelease({ prerelease: true }))).toBeNull();
+    for (const value of [null, [], {}, { message: 'API rate limit exceeded' }]) {
+      expect(validateGitHubRelease(value)).toBeNull();
+    }
+  });
+
+  it('never trusts assets from another tag or a command-like filename', () => {
+    for (const asset of [
+      githubAsset({ browser_download_url: 'https://evil.test/download.exe' }),
+      githubAsset({ browser_download_url: `${RELEASES}/download/v0.3.2/MetasequoiaIME_Setup_v0.3.2-unsigned.exe` }),
+      githubAsset({ name: 'MetasequoiaIME_Setup_v0.3.1-unsigned.exe' }),
+      githubAsset({ name: 'MetasequoiaIME_Setup_v0.3.2.exe;calc.exe' }),
+      githubAsset({ state: 'new' }), githubAsset({ size: 0 })
+    ]) {
+      const update = validateGitHubRelease(githubRelease({ assets: [asset] }));
+      expect(update).not.toBeNull();
+      expect(update?.installerName).toBeNull();
+      expect(update?.installerSha256).toBeNull();
+    }
+  });
+
+  it('does not claim a signature just because the filename lacks the unsigned suffix', () => {
+    const name = 'MetasequoiaIME_Setup_v0.3.2.exe';
+    const update = validateGitHubRelease(githubRelease({ assets: [githubAsset({
+      name, browser_download_url: `${FORK_RELEASES_PAGE_URL}/download/v0.3.2/${name}`,
+      digest: `sha256:${DIGEST.toUpperCase()}`
+    })] }));
+    expect(update?.signed).toBeNull();
+    expect(update?.installerSha256).toBe(DIGEST);
+  });
+
+  it('keeps the release usable without a digest while omitting a bogus hash command', () => {
+    for (const digest of [null, 'sha512:' + DIGEST, 'sha256:bad']) {
+      const update = validateGitHubRelease(githubRelease({ assets: [githubAsset({ digest })] }));
+      expect(update?.installerName).toBe('MetasequoiaIME_Setup_v0.3.2-unsigned.exe');
+      expect(describeInstallerTrust(update!).verify).toBeNull();
+    }
   });
 });

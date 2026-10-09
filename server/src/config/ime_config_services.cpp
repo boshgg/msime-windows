@@ -291,6 +291,47 @@ bool SetConfiguredNiuTransString(const std::string &key, const std::string &valu
     return true;
 }
 
+GlmTranslationConfig GetConfiguredGlmTranslation()
+{
+    std::lock_guard<std::mutex> lock(g_glm_translation_mutex);
+    return g_glm_translation;
+}
+
+bool SetConfiguredGlmTranslationBool(const std::string &key, bool value)
+{
+    if (key != "enabled" || !WriteConfiguredValue("glm_translation", key, value ? "true" : "false"))
+        return false;
+    std::lock_guard<std::mutex> lock(g_glm_translation_mutex);
+    g_glm_translation.enabled = value;
+    return true;
+}
+
+bool SetConfiguredGlmTranslationString(const std::string &key, const std::string &value)
+{
+    std::string GlmTranslationConfig::*target = nullptr;
+    const GlmTranslationConfig defaults;
+    std::string effective = value;
+    if (key == "endpoint")
+    {
+        target = &GlmTranslationConfig::endpoint;
+        if (effective.empty())
+            effective = defaults.endpoint;
+    }
+    else if (key == "api_key")
+        target = &GlmTranslationConfig::api_key;
+    else if (key == "model")
+    {
+        target = &GlmTranslationConfig::model;
+        if (effective.empty())
+            effective = defaults.model;
+    }
+    if (!target || !WriteConfiguredValue("glm_translation", key, EscapeTomlBasicString(effective)))
+        return false;
+    std::lock_guard<std::mutex> lock(g_glm_translation_mutex);
+    g_glm_translation.*target = effective;
+    return true;
+}
+
 std::string NormalizeNetworkProxyServer(const std::string &value)
 {
     const auto not_space = [](unsigned char ch) { return !std::isspace(ch); };

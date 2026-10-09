@@ -126,6 +126,14 @@ enabled = false
 app_id = ""
 apikey = ""
 
+# 智谱 GLM 批量翻译；本地词库优先。FlashX 为高速按量计费模型。
+# API Key 由 Windows 当前用户 DPAPI 加密保存；切换账户后请重新填写。
+[glm_translation]
+enabled = false
+endpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+api_key = ""
+model = "glm-5.3-flashx"
+
 #
 # 网络代理：云输入、模型下载、AI 联想、翻译、语音识别等需要联网的功能共用。
 # proxy_mode：system 跟随系统代理设置 / none 不使用代理（直连）/ custom 使用下面的 HTTP 代理。
@@ -497,6 +505,7 @@ token_openai = ""
 token_siliconflow = ""
 token_groq = ""
 token_custom = ""
+token_glm = ""
 endpoint = "https://api.deepseek.com/chat/completions"
 model = "deepseek-v4-flash"
 # 空槽位使用提供商默认值，旧版 endpoint/model 只归属于当前提供商
@@ -505,11 +514,13 @@ endpoint_openai = ""
 endpoint_siliconflow = ""
 endpoint_groq = ""
 endpoint_custom = ""
+endpoint_glm = ""
 model_deepseek = ""
 model_openai = ""
 model_siliconflow = ""
 model_groq = ""
 model_custom = ""
+model_glm = ""
 candidate_limit = 3
 prompt_id = "custom_1"
 prompt = """你是一个中文全拼输入法联想引擎。输入为已经切分好的拼音数组、前文上下文和候选数量。

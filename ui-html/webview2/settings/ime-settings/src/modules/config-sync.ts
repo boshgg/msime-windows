@@ -425,6 +425,7 @@ function applyConfigData(data: Record<string, any>, target?: string): void {
       module.applyTencentTmtConfig(data?.tencent_tmt);
       module.applyNiuTransConfig(data?.niutrans);
       module.applyCustomTranslationConfig(data?.custom_translation);
+      module.applyGlmTranslationConfig(data?.glm_translation);
     });
   }
   if (applies('tools-settings')) {

@@ -809,6 +809,39 @@ static void ApplyTencentTmtSubkey(const std::string &path, const json::object &d
 }
 
 // [custom_translation] 段：自定义翻译的总开关与逐项文本
+static void ApplyAiAssistantSubkey(const std::string &path, const json::object &data)
+{
+    if (path.rfind("ai_assistant.", 0) != 0)
+        return;
+    const auto key = path.substr(std::string("ai_assistant.").size());
+    const auto &value = data.at("value");
+    bool changed = false;
+    if (value.is_bool())
+        changed = SetConfiguredAiAssistantBool(key, json::value_to<bool>(value));
+    else if (value.is_string())
+        changed = SetConfiguredAiAssistantString(key, json::value_to<std::string>(value));
+    else if (value.is_int64())
+        changed = SetConfiguredAiAssistantInt(key, static_cast<int>(value.as_int64()));
+    if (changed)
+        PostSettingsConfig();
+}
+
+static void ApplyGlmTranslationSubkey(const std::string &path, const json::object &data)
+{
+    bool changed = false;
+    const auto &value = data.at("value");
+    if (path == "glm_translation.enabled" && value.is_bool())
+        changed = SetConfiguredGlmTranslationBool("enabled", json::value_to<bool>(value));
+    else if (path.rfind("glm_translation.", 0) == 0 && value.is_string())
+        changed = SetConfiguredGlmTranslationString(path.substr(std::string("glm_translation.").size()),
+                                                    json::value_to<std::string>(value));
+    if (changed)
+    {
+        FanyNamedPipe::EnqueueRefreshCandidatePageTask();
+        PostSettingsConfig();
+    }
+}
+
 static void ApplyCustomTranslationSubkey(const std::string &path, const json::object &data)
 {
     // 同上：rfind 前缀分支覆盖 "custom_translation.enabled"，必须保持 else-if 才能
@@ -1504,6 +1537,8 @@ HRESULT OnControllerCreatedSettingsWnd(            //
                             ApplyStatisticsSubkey(path, data);
                             ApplyTencentTmtSubkey(path, data);
                             ApplyCustomTranslationSubkey(path, data);
+                            ApplyGlmTranslationSubkey(path, data);
+                            ApplyAiAssistantSubkey(path, data);
                             ApplyNetworkSubkey(path, data);
                             ApplyAssociationSubkey(path, data);
                             ApplyUtilitySubkey(path, data);
@@ -1621,6 +1656,8 @@ void PostSettingsConfig()
     const FloatingToolbarItemsConfig &toolbar = GetConfiguredFloatingToolbarItems();
     const TencentTmtConfig &tencent_tmt = GetConfiguredTencentTmt();
     const CustomTranslationConfig &custom_translation = GetConfiguredCustomTranslation();
+    const GlmTranslationConfig &glm_translation = GetConfiguredGlmTranslation();
+    const AiAssistantConfig &ai = GetConfiguredAiAssistant();
     const NetworkProxyConfig network_proxy = GetConfiguredNetworkProxy();
     nlohmann::json payload = {
         {"type", "configSnapshot"},
@@ -1718,6 +1755,21 @@ void PostSettingsConfig()
             {"switch_language_ctrl", GetConfiguredSwitchLanguageCtrlEnabled()},
             {"switch_language_ctrl_alt_space", GetConfiguredSwitchLanguageCtrlAltSpaceEnabled()},
             {"toggle_character_set_ctrl_shift_f", GetConfiguredCharacterSetShortcutEnabled()}}},
+          {"ai_assistant",
+           {{"enabled", ai.enabled},
+            {"provider", ai.provider},
+            {"token", ai.token},
+            {"tokens", ai.tokens},
+            {"endpoint", ai.endpoint},
+            {"model", ai.model},
+            {"endpoints", ai.endpoints},
+            {"models", ai.models},
+            {"candidate_limit", ai.candidate_limit},
+            {"prompt", ai.prompt},
+            {"prompt_id", ai.prompt_id},
+            {"prompt_custom_1", ai.prompt_custom_1},
+            {"prompt_custom_2", ai.prompt_custom_2},
+            {"prompt_custom_3", ai.prompt_custom_3}}},
           {"tencent_tmt",
            {{"secret_id", tencent_tmt.secret_id},
             {"secret_key", tencent_tmt.secret_key},
@@ -1727,6 +1779,11 @@ void PostSettingsConfig()
            {{"enabled", custom_translation.enabled},
             {"endpoint", custom_translation.endpoint},
             {"api_key", custom_translation.api_key}}},
+          {"glm_translation",
+           {{"enabled", glm_translation.enabled},
+            {"endpoint", glm_translation.endpoint},
+            {"api_key", glm_translation.api_key},
+            {"model", glm_translation.model}}},
           {"network", {{"proxy_mode", network_proxy.mode}, {"proxy_server", network_proxy.server}}},
           {"utility",
            {{"unicode_mode", GetConfiguredUnicodeModeEnabled()},

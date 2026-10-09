@@ -62,24 +62,23 @@ struct VoiceInputConfig
 struct AiAssistantConfig
 {
     bool enabled = false;
-    // deepseek | openai | siliconflow | groq | custom (all use Chat Completions)
+    // deepseek | glm | openai | siliconflow | groq | custom (all use Chat Completions)
     std::string provider = "deepseek";
     std::string token;
     std::map<std::string, std::string> tokens;
     std::string endpoint = "https://api.deepseek.com/chat/completions";
     std::string model = "deepseek-v4-flash";
     std::map<std::string, std::string> endpoints{{"deepseek", "https://api.deepseek.com/chat/completions"},
+                                                 {"glm", "https://open.bigmodel.cn/api/paas/v4/chat/completions"},
                                                  {"openai", "https://api.openai.com/v1/chat/completions"},
                                                  {"siliconflow", "https://api.siliconflow.cn/v1/chat/completions"},
                                                  {"groq", "https://api.groq.com/openai/v1/chat/completions"},
                                                  {"custom", ""}};
     // Groq 已弃用 llama-3.3-70b-versatile，默认模型改用 qwen/qwen3.8-27b。
     // custom 槽位不预设接口地址和模型，全部由用户填写并单独保存。
-    std::map<std::string, std::string> models{{"deepseek", "deepseek-v4-flash"},
-                                              {"openai", "gpt-4o-mini"},
-                                              {"siliconflow", "Qwen/Qwen3-8B"},
-                                              {"groq", "qwen/qwen3.8-27b"},
-                                              {"custom", ""}};
+    std::map<std::string, std::string> models{{"deepseek", "deepseek-v4-flash"}, {"glm", "glm-5.3"},
+                                              {"openai", "gpt-4o-mini"},         {"siliconflow", "Qwen/Qwen3-8B"},
+                                              {"groq", "qwen/qwen3.8-27b"},      {"custom", ""}};
     int candidate_limit = 3;
     // custom_1 | custom_2 | custom_3
     std::string prompt_id = "custom_1";
@@ -135,6 +134,14 @@ struct NiuTransConfig
     // 控制台->API应用 中的应用唯一标识与 apikey。
     std::string app_id;
     std::string apikey;
+};
+
+struct GlmTranslationConfig
+{
+    bool enabled = false;
+    std::string endpoint = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+    std::string api_key;
+    std::string model = "glm-5.3-flashx";
 };
 
 // [network] 段：云输入、模型下载、AI、翻译、语音等所有出站请求共用的代理设置。
@@ -573,6 +580,9 @@ bool SetConfiguredCustomTranslationString(const std::string &key, const std::str
 const NiuTransConfig &GetConfiguredNiuTrans();
 bool SetConfiguredNiuTransBool(const std::string &key, bool value);
 bool SetConfiguredNiuTransString(const std::string &key, const std::string &value);
+GlmTranslationConfig GetConfiguredGlmTranslation();
+bool SetConfiguredGlmTranslationBool(const std::string &key, bool value);
+bool SetConfiguredGlmTranslationString(const std::string &key, const std::string &value);
 // Snapshot by value: download threads and the cloud worker read it while the settings host rewrites it.
 NetworkProxyConfig GetConfiguredNetworkProxy();
 bool SetConfiguredNetworkString(const std::string &key, const std::string &value);

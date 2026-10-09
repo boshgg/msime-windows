@@ -1,3 +1,5 @@
+> This fork adds GLM-5.3 suggestions, GLM-5.3-FlashX batch translation and Windows current-user DPAPI credential protection. Download from [fork releases](https://github.com/boshgg/msime-windows/releases).
+
 # Metasequoia IME for Windows
 
 [中文 README](README.md) · [Website](https://msime.app) · [Docs](https://msime.app/docs/) · [Privacy](PRIVACY.md) · [Code signing policy](docs/code-signing-policy.md)

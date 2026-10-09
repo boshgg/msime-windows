@@ -1,6 +1,7 @@
 #include "ai_assistant.h"
 #include "ai_assistant_cache.h"
 #include "ai_assistant_cache_key.h"
+#include "chat_completion_request.h"
 
 #include "utils/network_proxy.h"
 #include <curl/curl.h>
@@ -8,6 +9,7 @@
 #include <Windows.h>
 #include <fmt/format.h>
 #include <atomic>
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -28,15 +30,29 @@ AiAssistant::detail::SuggestionCache g_candidate_cache;
 
 size_t WriteResponse(char *data, size_t size, size_t count, void *user)
 {
-    static_cast<std::string *>(user)->append(data, size * count);
-    return size * count;
+    constexpr size_t limit = 256 * 1024;
+    auto *response = static_cast<std::string *>(user);
+    if (size != 0 && count > limit / size)
+        return 0;
+    const size_t bytes = size * count;
+    if (bytes > limit - (std::min)(response->size(), limit))
+        return 0;
+    response->append(data, bytes);
+    return bytes;
+}
+
+int CancelObsolete(void *user, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
+{
+    return !g_running || g_generation.load() != *static_cast<uint64_t *>(user) ? 1 : 0;
 }
 
 std::string Fetch(const AiAssistant::Request &request, uint64_t generation)
 {
     const auto &config = request.config;
     if (!config.enabled || config.token.empty() || config.endpoint.empty() || config.model.empty() ||
-        request.pinyin_segments.empty() || g_generation.load() != generation)
+        request.pinyin_segments.empty() || g_generation.load() != generation ||
+        (config.provider == "glm" && (config.endpoint.rfind("https://", 0) != 0 ||
+                                      config.token.find_first_of("\r\n\0", 0, 3) != std::string::npos)))
     {
         (void)0;
         return {};
@@ -45,20 +61,11 @@ std::string Fetch(const AiAssistant::Request &request, uint64_t generation)
     nlohmann::json input = {{"segmented_pinyin", request.pinyin_segments},
                             {"context", request.context},
                             {"candidate_limit", config.candidate_limit}};
-    nlohmann::json body = {
-        {"model", config.model},
-        {"stream", false},
-        {"temperature", 0.2},
-        {"max_tokens", 512},
-        {"response_format", {{"type", "json_object"}}},
-        {"messages",
-         {{{"role", "system"}, {"content", config.prompt}}, {{"role", "user"}, {"content", input.dump()}}}}};
-    if (config.provider == "deepseek")
-    {
-        // DeepSeek thinking can add hundreds of reasoning tokens and noticeably delay
-        // an IME suggestion. Keep custom OpenAI-compatible providers untouched.
-        body["thinking"] = {{"type", "disabled"}};
-    }
+    const auto body = ChatCompletion::BuildRequest(
+        config.provider, config.model,
+        {{{"role", "system"}, {"content", config.prompt}},
+         {{"role", "user"}, {"content", input.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace)}}},
+        config.provider == "glm" ? 4096 : 512, true);
 
     // Deliberately exclude API token and system prompt from logs.
     (void)0;
@@ -71,7 +78,7 @@ std::string Fetch(const AiAssistant::Request &request, uint64_t generation)
     curl_slist *headers = nullptr;
     headers = curl_slist_append(headers, "Content-Type: application/json");
     headers = curl_slist_append(headers, authorization.c_str());
-    const std::string payload = body.dump();
+    const std::string payload = body.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
     curl_easy_setopt(curl, CURLOPT_URL, config.endpoint.c_str());
     NetworkProxy::ApplyToCurl(curl);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -80,8 +87,11 @@ std::string Fetch(const AiAssistant::Request &request, uint64_t generation)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteResponse);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 2500L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 8000L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, config.provider == "glm" ? 15000L : 8000L);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, CancelObsolete);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &generation);
     const CURLcode result = curl_easy_perform(curl);
     long status = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
@@ -101,9 +111,10 @@ std::string Fetch(const AiAssistant::Request &request, uint64_t generation)
 
     try
     {
-        const auto outer = nlohmann::json::parse(response);
-        const std::string content = outer.at("choices").at(0).at("message").at("content").get<std::string>();
-        const auto result_json = nlohmann::json::parse(content);
+        const auto completion = ChatCompletion::ParseContent(response);
+        if (!completion.error.empty())
+            return {};
+        const auto result_json = nlohmann::json::parse(completion.content);
         const auto &candidates = result_json.at("candidates");
         if (!candidates.is_array() || candidates.empty())
         {

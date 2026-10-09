@@ -364,6 +364,7 @@ std::wstring BuildConfigMessage(bool refresh_skin_catalog)
     const TencentTmtConfig &tencent_tmt = GetConfiguredTencentTmt();
     const CustomTranslationConfig &custom_translation = GetConfiguredCustomTranslation();
     const NiuTransConfig &niutrans = GetConfiguredNiuTrans();
+    const GlmTranslationConfig &glm_translation = GetConfiguredGlmTranslation();
     const NetworkProxyConfig network_proxy = GetConfiguredNetworkProxy();
     const FrequencyAdjustmentConfig &frequency = GetConfiguredFrequencyAdjustment();
     const FloatingToolbarItemsConfig &toolbar = GetConfiguredFloatingToolbarItems();
@@ -660,6 +661,11 @@ std::wstring BuildConfigMessage(bool refresh_skin_catalog)
             {"endpoint", custom_translation.endpoint},
             {"api_key", custom_translation.api_key}}},
           {"niutrans", {{"enabled", niutrans.enabled}, {"app_id", niutrans.app_id}, {"apikey", niutrans.apikey}}},
+          {"glm_translation",
+           {{"enabled", glm_translation.enabled},
+            {"endpoint", glm_translation.endpoint},
+            {"api_key", glm_translation.api_key},
+            {"model", glm_translation.model}}},
           {"network", {{"proxy_mode", network_proxy.mode}, {"proxy_server", network_proxy.server}}},
           {"helpcode",
            {{"shuangpin_helpcode", GetConfiguredShuangpinHelpcodeEnabled()},
@@ -1026,6 +1032,16 @@ bool ApplyConfigUpdate(const json::object &data)
         return value.is_string() &&
                SetConfiguredCustomTranslationString(path.substr(std::string("custom_translation.").size()),
                                                     json::value_to<std::string>(value));
+    }
+    if (path == "glm_translation.enabled")
+        return data.at("value").is_bool() &&
+               SetConfiguredGlmTranslationBool("enabled", json::value_to<bool>(data.at("value")));
+    if (path.rfind("glm_translation.", 0) == 0)
+    {
+        const json::value &value = data.at("value");
+        return value.is_string() &&
+               SetConfiguredGlmTranslationString(path.substr(std::string("glm_translation.").size()),
+                                                 json::value_to<std::string>(value));
     }
     if (path == "niutrans.enabled")
         return SetConfiguredNiuTransBool("enabled", json::value_to<bool>(data.at("value")));
@@ -1433,7 +1449,11 @@ void HandleWebMessage(HWND hwnd, ICoreWebView2WebMessageReceivedEventArgs *args)
                 return [saved, completion = std::move(completion)] {
                     completion();
                     if (!saved)
-                        MessageBoxW(g_settings_hwnd, L"设置保存失败，请重试。", L"水杉输入法", MB_OK | MB_ICONWARNING);
+                        MessageBoxW(g_settings_hwnd,
+                                    L"设置保存失败：请检查配置文件是否可写。若配置来自其他 Windows "
+                                    L"账户，密钥可能无法解密；请先备份 config.toml，再将无法解密的 dpapi: "
+                                    L"密钥值清空为双引号，重开设置后重新填写。",
+                                    L"水杉输入法", MB_OK | MB_ICONWARNING);
                 };
             });
         }

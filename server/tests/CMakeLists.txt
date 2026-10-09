@@ -27,6 +27,13 @@ set(TEST_SOURCE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/test_translation_gloss.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/test_default_config_credentials.cpp"
     "${CMAKE_SOURCE_DIR}/src/cloud/translation_gloss.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_credential_store.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_credential_config.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_glm_chat_completion.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/test_glm_translation.cpp"
+    "${CMAKE_SOURCE_DIR}/src/config/credential_store.cpp"
+    "${CMAKE_SOURCE_DIR}/src/ai/chat_completion_request.cpp"
+    "${CMAKE_SOURCE_DIR}/src/cloud/glm_translation.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/test_custom_translation.cpp"
     "${CMAKE_SOURCE_DIR}/src/cloud/custom_translation.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/test_niutrans_translation.cpp"
@@ -167,6 +174,7 @@ target_link_libraries(${TEST_EXECUTABLE_NAME}
     user32
     shell32
     advapi32
+    crypt32
     ole32
 )
 
