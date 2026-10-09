@@ -90,7 +90,7 @@ std::string ErrorDetail(const HttpResponse &response)
 
 // payload 为空指针时发 GET，否则以 JSON body 发 POST。
 HttpResponse PerformJsonRequest(const std::string &endpoint, const std::string &token, const std::string *payload,
-                                std::size_t max_bytes = kMaxResponseBytes)
+                                std::size_t max_bytes = kMaxResponseBytes, long timeout_ms = kRequestTimeoutMs)
 {
     InitCurl();
     HttpResponse response;
@@ -119,7 +119,7 @@ HttpResponse PerformJsonRequest(const std::string &endpoint, const std::string &
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, kConnectTimeoutMs);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, kRequestTimeoutMs);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout_ms);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     response.code = curl_easy_perform(curl);
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response.status);
@@ -176,7 +176,8 @@ ApiCredentialTest::Result TestChat(const ApiCredentialTest::Request &request)
                                                                      : 16,
                                                    assistant);
     const std::string payload = body.dump();
-    const HttpResponse response = PerformJsonRequest(endpoint, token, &payload);
+    const HttpResponse response = PerformJsonRequest(endpoint, token, &payload, kMaxResponseBytes,
+                                                     provider == "glm" ? 20000L : kRequestTimeoutMs);
     if (response.code != CURLE_OK || response.status < 200 || response.status >= 300)
         return {false, "测试失败：" + ErrorDetail(response)};
     const auto completion = ChatCompletion::ParseContent(response.body);

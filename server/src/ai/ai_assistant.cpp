@@ -87,7 +87,7 @@ std::string Fetch(const AiAssistant::Request &request, uint64_t generation)
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteResponse);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 2500L);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, config.provider == "glm" ? 15000L : 8000L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, config.provider == "glm" ? 20000L : 8000L);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, CancelObsolete);

@@ -609,6 +609,13 @@ jobs:
           -TsfDirectory windows -ServerDirectory server -UiHtmlDirectory ui-html -NoticesDirectory .
           -HelpCodeDirectory engine/helpcode -IncludeSymbols
 
+      # uiAccess requires a trusted signature at process launch. Keep the signed
+      # artifact unchanged; the unsigned installer runs at normal user integrity.
+      - name: Disable uiAccess in the unsigned installer payload
+        if: ${{ steps.signing.outputs.signing_enabled == 'false' }}
+        shell: pwsh
+        run: ./scripts/ci/embed-server-manifest.ps1 -BuildDir installer/server_exe -UiAccess false
+
       - name: Embed the exact product dependency manifest
         env:
           WINDOWS_COMMIT: ${{ needs.prepare.outputs.target_sha }}
